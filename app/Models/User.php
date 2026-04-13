@@ -41,6 +41,11 @@ class User extends Authenticatable
         return $this->hasMany(Campaign::class);
     }
 
+    public function aiUsageLogs(): HasMany
+    {
+        return $this->hasMany(AiUsageLog::class);
+    }
+
     public function assignedPhoneNumbers(): BelongsToMany
     {
         return $this->belongsToMany(PhoneNumber::class, 'phone_number_user')

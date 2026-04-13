@@ -44,18 +44,28 @@ return [
     */
     /*
     |--------------------------------------------------------------------------
-    | Ollama (campaign inbound AI replies)
+    | Local / remote AI chat (HTTP /api/chat compatible)
     |--------------------------------------------------------------------------
-    | Used when a campaign is active, ai_inbound_enabled is true, and an SMS
-    | arrives on a line attached to that campaign. Prefer per-campaign
-    | `ai_inbound_system_prompt` on the campaign record; this env is the fallback
-    | when the campaign field is empty.
+    | Used for admin playground and campaign inbound SMS when ai_inbound_enabled
+    | is true. Prefer per-campaign `ai_inbound_system_prompt`; AI_CAMPAIGN_INBOUND_SYSTEM_PROMPT
+    | is the fallback when the campaign field is empty.
     */
-    'ollama' => [
-        'url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
-        'model' => env('OLLAMA_MODEL', 'qwen2.5:7b'),
-        'timeout_seconds' => (int) env('OLLAMA_TIMEOUT_SECONDS', 120),
-        'campaign_inbound_system_prompt' => env('OLLAMA_CAMPAIGN_INBOUND_SYSTEM_PROMPT', ''),
+    'ai' => [
+        'url' => env('AI_URL', 'http://127.0.0.1:11434'),
+        'model' => env('AI_MODEL', 'qwen2.5:7b'),
+        'timeout_seconds' => (int) env('AI_TIMEOUT_SECONDS', 120),
+        'campaign_inbound_system_prompt' => env('AI_CAMPAIGN_INBOUND_SYSTEM_PROMPT', ''),
+        /** Max prior SMS turns (inbound + outbound pairs) sent as chat history; bounded for token limits. */
+        'campaign_inbound_max_context_messages' => max(4, min(200, (int) env('AI_CAMPAIGN_INBOUND_MAX_CONTEXT_MESSAGES', 48))),
+        /**
+         * Appended to every campaign AI system message so the model uses thread context and stays consistent.
+         * Set AI_CAMPAIGN_INBOUND_GUARDRAILS to an empty string in .env to disable.
+         */
+        'campaign_inbound_guardrails' => env('AI_CAMPAIGN_INBOUND_GUARDRAILS', implode("\n\n", [
+            'You are in an ongoing SMS conversation. The messages after this system text are the full thread so far—read them before you reply.',
+            'Do not repeat questions the contact already answered. Do not contradict your earlier replies in this thread unless you are correcting a clear mistake.',
+            'Stay consistent in tone and facts. Keep each reply short and natural for SMS.',
+        ])),
     ],
 
     'sms_gateway' => [

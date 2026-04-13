@@ -1,10 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\AiPlaygroundController;
+use App\Http\Controllers\Api\V1\Admin\AiUsageController;
 use App\Http\Controllers\Api\V1\Admin\BillingSettingsController;
 use App\Http\Controllers\Api\V1\Admin\CampaignBuilderLimitController;
 use App\Http\Controllers\Api\V1\Admin\DebugController;
 use App\Http\Controllers\Api\V1\Admin\DeviceManagementController;
-use App\Http\Controllers\Api\V1\Admin\OllamaPlaygroundController;
 use App\Http\Controllers\Api\V1\Admin\PhoneNumberAssignmentController;
 use App\Http\Controllers\Api\V1\Admin\UserManagementController;
 use App\Http\Controllers\Api\V1\AndroidGatewayController;
@@ -57,7 +58,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/debug/messages/by-device-message-id/{deviceMessageId}', [DebugController::class, 'messageByDeviceMessageId'])
                 ->whereNumber('deviceMessageId');
             Route::get('/debug/messages/{message}', [DebugController::class, 'messageById']);
-            Route::post('/ollama/chat', [OllamaPlaygroundController::class, 'chat']);
+            Route::post('/ai/chat', [AiPlaygroundController::class, 'chat']);
+            Route::get('/ai-usage', [AiUsageController::class, 'index']);
         });
 
         Route::middleware(['permission:campaign'])->group(function (): void {

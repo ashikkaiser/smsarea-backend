@@ -21,14 +21,14 @@ class CampaignAiInboundService
     }
 
     /**
-     * Build Ollama message list: system + recent conversation as user/assistant turns.
+     * Build chat API message list: system + recent conversation as user/assistant turns.
      *
      * @return array<int, array{role: string, content: string}>
      */
-    public function buildChatMessages(Campaign $campaign, Conversation $conversation, int $maxTurns = 24): array
+    public function buildChatMessages(Campaign $campaign, Conversation $conversation, ?int $maxTurns = null): array
     {
         $perCampaign = trim((string) ($campaign->ai_inbound_system_prompt ?? ''));
-        $global = trim((string) config('services.ollama.campaign_inbound_system_prompt', ''));
+        $global = trim((string) config('services.ai.campaign_inbound_system_prompt', ''));
         $system = $perCampaign !== '' ? $perCampaign : $global;
         if ($system === '') {
             return [];
@@ -39,6 +39,14 @@ class CampaignAiInboundService
             $system .= "\n\nYou are writing as: {$agent}.";
         }
 
+        $guardrails = trim((string) config('services.ai.campaign_inbound_guardrails', ''));
+        if ($guardrails !== '') {
+            $system .= "\n\n---\n".$guardrails;
+        }
+
+        $limit = $maxTurns ?? (int) config('services.ai.campaign_inbound_max_context_messages', 48);
+        $limit = max(4, min(200, $limit));
+
         $rows = $conversation->messages()
             ->where('message_type', 'sms')
             ->orderBy('occurred_at')
@@ -47,7 +55,7 @@ class CampaignAiInboundService
 
         $messages = [['role' => 'system', 'content' => $system]];
 
-        foreach ($rows->slice(-$maxTurns)->values() as $row) {
+        foreach ($rows->slice(-$limit)->values() as $row) {
             $text = trim((string) ($row->body ?? ''));
             if ($text === '') {
                 continue;

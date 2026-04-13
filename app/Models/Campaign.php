@@ -35,6 +35,11 @@ class Campaign extends Model
         return $this->hasMany(CampaignStep::class);
     }
 
+    public function aiUsageLogs(): HasMany
+    {
+        return $this->hasMany(AiUsageLog::class);
+    }
+
     public function phoneNumbers(): BelongsToMany
     {
         return $this->belongsToMany(PhoneNumber::class, 'campaign_phone_number')

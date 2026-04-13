@@ -67,7 +67,7 @@ cd smsarea-backend
 composer install
 cp .env.example .env
 php artisan key:generate
-# Configure .env (database, Sanctum, SMS gateway URLs, Ollama if used), then:
+# Configure .env (database, Sanctum, SMS gateway URLs, AI_URL if used), then:
 php artisan migrate
 ```
 

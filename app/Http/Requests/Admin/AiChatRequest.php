@@ -4,7 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class OllamaChatRequest extends FormRequest
+class AiChatRequest extends FormRequest
 {
     public function authorize(): bool
     {

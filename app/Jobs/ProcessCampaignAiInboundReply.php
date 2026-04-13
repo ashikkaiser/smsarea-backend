@@ -2,10 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Models\AiUsageLog;
 use App\Models\Message;
+use App\Services\AiChatService;
 use App\Services\CampaignAiInboundService;
 use App\Services\ChatService;
-use App\Services\OllamaChatService;
 use App\Services\SmsGatewayService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,7 +26,7 @@ class ProcessCampaignAiInboundReply implements ShouldQueue
 
     public function handle(
         CampaignAiInboundService $campaignAi,
-        OllamaChatService $ollama,
+        AiChatService $aiChat,
         ChatService $chatService,
         SmsGatewayService $smsGatewayService,
     ): void {
@@ -62,14 +63,15 @@ class ProcessCampaignAiInboundReply implements ShouldQueue
                 'reason' => 'no_system_prompt',
                 'message_id' => $inbound->id,
                 'campaign_id' => $campaign->id,
-                'hint' => 'Set campaign AI system prompt or OLLAMA_CAMPAIGN_INBOUND_SYSTEM_PROMPT.',
+                'hint' => 'Set campaign AI system prompt or AI_CAMPAIGN_INBOUND_SYSTEM_PROMPT on the server.',
             ]);
 
             return;
         }
 
-        $reply = $ollama->chatCompletion($messages);
-        if ($reply === null) {
+        $completion = $aiChat->chatCompletion($messages);
+        $reply = $completion?->replyText();
+        if ($reply === null || $completion === null) {
             Log::warning('campaign_ai.inbound_no_reply', [
                 'message_id' => $inbound->id,
                 'campaign_id' => $campaign->id,
@@ -77,6 +79,18 @@ class ProcessCampaignAiInboundReply implements ShouldQueue
 
             return;
         }
+
+        AiUsageLog::query()->create([
+            'user_id' => $campaign->user_id,
+            'campaign_id' => $campaign->id,
+            'source' => AiUsageLog::SOURCE_CAMPAIGN_INBOUND,
+            'conversation_id' => $conversation->id,
+            'message_id' => $inbound->id,
+            'model' => $completion->model,
+            'prompt_tokens' => $completion->promptTokens,
+            'completion_tokens' => $completion->completionTokens,
+            'total_tokens' => $completion->totalTokens,
+        ]);
 
         $outbound = $chatService->addOutboundMessage($conversation, [
             'contact_number' => $conversation->contact_number,

@@ -9,6 +9,7 @@
 #   - Local file .env.prod at project root (copy from .env.prod.example)
 #   - Remote: PHP 8.3+, composer in PATH, writable storage/bootstrap/cache
 #   - After deploy, storage/ and bootstrap/cache/ are chown'd to www-data:www-data (override with DEPLOY_WEB_USER / DEPLOY_WEB_GROUP; use DEPLOY_SUDO_CHOWN=1 if needed).
+#   - Queue workers: runs `sudo supervisorctl restart laravel-worker:*` when DEPLOY_SUPERVISOR_RESTART=1 (needs passwordless sudo for supervisorctl if non-interactive).
 #
 # Usage:
 #   ./scripts/deploy.sh
@@ -18,6 +19,7 @@
 #   DEPLOY_GIT_URL=git@github.com:ashikkaiser/smsarea-backend.git ./scripts/deploy.sh
 #   DEPLOY_GIT_BRANCH=master   # if the remote uses master instead of main
 #   DEPLOY_SUDO_CHOWN=1        # if chown must use sudo on the server
+#   DEPLOY_SUPERVISOR_RESTART=0  # skip supervisorctl restart laravel-worker:*
 #
 set -euo pipefail
 
@@ -30,7 +32,7 @@ DEPLOY_TARGET="${DEPLOY_TARGET:-2tul}"
 # Remote app root (no trailing slash).
 DEPLOY_PATH="${DEPLOY_PATH:-/var/www/app}"
 # Git: branch and remote to deploy (full reset to match remote)
-DEPLOY_GIT_BRANCH="${DEPLOY_GIT_BRANCH:-main}"
+DEPLOY_GIT_BRANCH="${DEPLOY_GIT_BRANCH:-master}"
 DEPLOY_GIT_REMOTE="${DEPLOY_GIT_REMOTE:-origin}"
 # Optional: clone URL when DEPLOY_PATH has no .git (first deploy only)
 DEPLOY_GIT_URL="${DEPLOY_GIT_URL:-}"
@@ -42,6 +44,8 @@ DEPLOY_WEB_USER="${DEPLOY_WEB_USER:-www-data}"
 DEPLOY_WEB_GROUP="${DEPLOY_WEB_GROUP:-www-data}"
 # Set to 1 if the SSH user must use sudo to chown (e.g. deploy is not root).
 DEPLOY_SUDO_CHOWN="${DEPLOY_SUDO_CHOWN:-0}"
+# Set to 0 to skip restarting Supervisor queue workers after deploy.
+DEPLOY_SUPERVISOR_RESTART="${DEPLOY_SUPERVISOR_RESTART:-1}"
 
 ENV_PROD_LOCAL="$ROOT/.env.prod"
 
@@ -72,6 +76,7 @@ ssh -o BatchMode=yes "$DEPLOY_TARGET" \
 " export DEPLOY_WEB_USER=$(printf '%q' "$DEPLOY_WEB_USER");"\
 " export DEPLOY_WEB_GROUP=$(printf '%q' "$DEPLOY_WEB_GROUP");"\
 " export DEPLOY_SUDO_CHOWN=$(printf '%q' "$DEPLOY_SUDO_CHOWN");"\
+" export DEPLOY_SUPERVISOR_RESTART=$(printf '%q' "$DEPLOY_SUPERVISOR_RESTART");"\
 ' exec bash -s' <<'REMOTE'
 set -euo pipefail
 
@@ -154,6 +159,11 @@ $DEPLOY_PHP artisan optimize
 
 echo "    [remote] php artisan queue:restart (ignore if no queue worker)"
 $DEPLOY_PHP artisan queue:restart 2>/dev/null || true
+
+if [[ "${DEPLOY_SUPERVISOR_RESTART:-1}" == "1" ]]; then
+  echo "    [remote] sudo supervisorctl restart laravel-worker:*"
+  sudo supervisorctl restart 'laravel-worker:*' || echo "    [remote] warning: supervisorctl restart failed (check program name / sudo)."
+fi
 
 echo "    [remote] chown ${DEPLOY_WEB_USER}:${DEPLOY_WEB_GROUP} on storage and bootstrap/cache"
 if id "$DEPLOY_WEB_USER" >/dev/null 2>&1; then
