@@ -27,7 +27,9 @@ class CampaignAiInboundService
      */
     public function buildChatMessages(Campaign $campaign, Conversation $conversation, int $maxTurns = 24): array
     {
-        $system = trim((string) config('services.ollama.campaign_inbound_system_prompt', ''));
+        $perCampaign = trim((string) ($campaign->ai_inbound_system_prompt ?? ''));
+        $global = trim((string) config('services.ollama.campaign_inbound_system_prompt', ''));
+        $system = $perCampaign !== '' ? $perCampaign : $global;
         if ($system === '') {
             return [];
         }

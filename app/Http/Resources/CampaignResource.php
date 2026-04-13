@@ -16,6 +16,7 @@ class CampaignResource extends JsonResource
             'status' => $this->status,
             'entry_message_template' => $this->entry_message_template,
             'ai_inbound_enabled' => (bool) $this->ai_inbound_enabled,
+            'ai_inbound_system_prompt' => $this->ai_inbound_system_prompt,
             'settings' => $this->settings,
             'steps' => CampaignStepResource::collection($this->whenLoaded('steps')),
             'phone_numbers' => PhoneNumberResource::collection($this->whenLoaded('phoneNumbers')),

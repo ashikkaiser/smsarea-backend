@@ -29,6 +29,7 @@ class CampaignStoreRequest extends FormRequest
             'agent_name' => ['nullable', 'string', 'max:255'],
             'entry_message_template' => ['nullable', 'string'],
             'ai_inbound_enabled' => ['nullable', 'boolean'],
+            'ai_inbound_system_prompt' => ['nullable', 'string', 'max:32000'],
             'status' => ['nullable', 'in:draft,active,paused,archived'],
             'settings' => ['nullable', 'array'],
             'phone_number_ids' => ['nullable', 'array'],

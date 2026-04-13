@@ -47,8 +47,9 @@ return [
     | Ollama (campaign inbound AI replies)
     |--------------------------------------------------------------------------
     | Used when a campaign is active, ai_inbound_enabled is true, and an SMS
-    | arrives on a line attached to that campaign. Set campaign_inbound_system_prompt
-    | (env OLLAMA_CAMPAIGN_INBOUND_SYSTEM_PROMPT) before enabling in production.
+    | arrives on a line attached to that campaign. Prefer per-campaign
+    | `ai_inbound_system_prompt` on the campaign record; this env is the fallback
+    | when the campaign field is empty.
     */
     'ollama' => [
         'url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),

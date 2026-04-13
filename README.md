@@ -57,6 +57,29 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 
+## Local setup (SMS Area backend)
+
+The GitHub repository should be named **`smsarea-backend`** (not `smszone-backend`). Rename it first on GitHub: **Settings → General → Repository name** → `smsarea-backend`, then use the URL below.
+
+```bash
+git clone https://github.com/ashikkaiser/smsarea-backend.git
+cd smsarea-backend
+composer install
+cp .env.example .env
+php artisan key:generate
+# Configure .env (database, Sanctum, SMS gateway URLs, Ollama if used), then:
+php artisan migrate
+```
+
+If you still have a local clone from the old **`smszone-backend`** remote, point it at the renamed repo:
+
+```bash
+git remote set-url origin https://github.com/ashikkaiser/smsarea-backend.git
+git fetch origin
+```
+
+This repository’s default branch on GitHub may be **`master`**. For deploys, set `DEPLOY_GIT_BRANCH=master` if you are not using `main`.
+
 ## SMS Gateway API Notes
 
 - Auth stack uses Laravel Sanctum (no JWT).

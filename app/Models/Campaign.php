@@ -16,6 +16,7 @@ class Campaign extends Model
         'status',
         'entry_message_template',
         'ai_inbound_enabled',
+        'ai_inbound_system_prompt',
         'settings',
     ];
 

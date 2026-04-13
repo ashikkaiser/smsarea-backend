@@ -20,6 +20,7 @@ class CampaignService
                 'status' => $data['status'] ?? 'draft',
                 'entry_message_template' => $data['entry_message_template'] ?? null,
                 'ai_inbound_enabled' => (bool) ($data['ai_inbound_enabled'] ?? false),
+                'ai_inbound_system_prompt' => self::normalizedAiInboundSystemPrompt($data['ai_inbound_system_prompt'] ?? null),
                 'settings' => $data['settings'] ?? null,
             ]);
 
@@ -190,6 +191,9 @@ class CampaignService
                 'ai_inbound_enabled' => array_key_exists('ai_inbound_enabled', $data)
                     ? (bool) $data['ai_inbound_enabled']
                     : $campaign->ai_inbound_enabled,
+                'ai_inbound_system_prompt' => array_key_exists('ai_inbound_system_prompt', $data)
+                    ? self::normalizedAiInboundSystemPrompt($data['ai_inbound_system_prompt'] ?? null)
+                    : $campaign->ai_inbound_system_prompt,
                 'settings' => $data['settings'] ?? null,
             ]);
 
@@ -220,5 +224,15 @@ class CampaignService
 
             return $campaign->fresh(['steps', 'phoneNumbers']);
         });
+    }
+
+    private static function normalizedAiInboundSystemPrompt(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
     }
 }

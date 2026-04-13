@@ -59,9 +59,10 @@ class ProcessCampaignAiInboundReply implements ShouldQueue
         $messages = $campaignAi->buildChatMessages($campaign, $conversation);
         if ($messages === []) {
             Log::info('campaign_ai.inbound_skipped', [
-                'reason' => 'empty_system_prompt',
+                'reason' => 'no_system_prompt',
                 'message_id' => $inbound->id,
                 'campaign_id' => $campaign->id,
+                'hint' => 'Set campaign AI system prompt or OLLAMA_CAMPAIGN_INBOUND_SYSTEM_PROMPT.',
             ]);
 
             return;
