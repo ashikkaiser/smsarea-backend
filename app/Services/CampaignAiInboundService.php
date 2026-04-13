@@ -64,6 +64,31 @@ class CampaignAiInboundService
             $messages[] = ['role' => $role, 'content' => $text];
         }
 
-        return $messages;
+        return $this->mergeConsecutiveUserTurns($messages);
+    }
+
+    /**
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @return array<int, array{role: string, content: string}>
+     */
+    private function mergeConsecutiveUserTurns(array $messages): array
+    {
+        if ($messages === []) {
+            return $messages;
+        }
+
+        $out = [$messages[0]];
+        for ($i = 1, $c = count($messages); $i < $c; $i++) {
+            $m = $messages[$i];
+            $lastIdx = count($out) - 1;
+            $prev = $out[$lastIdx];
+            if ($m['role'] === 'user' && $prev['role'] === 'user') {
+                $out[$lastIdx]['content'] = $prev['content']."\n\n".$m['content'];
+            } else {
+                $out[] = $m;
+            }
+        }
+
+        return $out;
     }
 }

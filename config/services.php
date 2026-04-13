@@ -58,6 +58,11 @@ return [
         /** Max prior SMS turns (inbound + outbound pairs) sent as chat history; bounded for token limits. */
         'campaign_inbound_max_context_messages' => max(4, min(200, (int) env('AI_CAMPAIGN_INBOUND_MAX_CONTEXT_MESSAGES', 48))),
         /**
+         * Wait this many seconds after the last inbound SMS before calling the AI, so rapid multi-part
+         * messages produce one combined reply. Each new inbound resets the timer (2–90 seconds).
+         */
+        'campaign_inbound_debounce_seconds' => max(2, min(90, (int) env('AI_CAMPAIGN_INBOUND_DEBOUNCE_SECONDS', 10))),
+        /**
          * Appended to every campaign AI system message so the model uses thread context and stays consistent.
          * Set AI_CAMPAIGN_INBOUND_GUARDRAILS to an empty string in .env to disable.
          */

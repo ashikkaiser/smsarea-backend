@@ -16,6 +16,7 @@ use App\Support\SmsReactionParser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
@@ -282,7 +283,17 @@ class AndroidGatewayController extends Controller
             && trim((string) ($data['message'] ?? '')) !== ''
             && $this->campaignAiInboundService->activeAiCampaignForPhone($phoneNumber)
         ) {
-            Bus::dispatch(new ProcessCampaignAiInboundReply((int) $message->id));
+            $debounceSeconds = max(2, min(90, (int) config('services.ai.campaign_inbound_debounce_seconds', 10)));
+            $debounceKey = 'campaign_ai_debounce_until:'.$conversation->id;
+            Cache::put(
+                $debounceKey,
+                now()->addSeconds($debounceSeconds)->getTimestamp(),
+                $debounceSeconds * 4 + 120,
+            );
+            Bus::dispatch(
+                (new ProcessCampaignAiInboundReply((int) $conversation->id))
+                    ->delay(now()->addSeconds($debounceSeconds)),
+            );
         }
 
         return response()->json(['message' => 'ok']);
