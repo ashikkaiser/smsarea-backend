@@ -24,6 +24,10 @@ class EnsureUserPermission
             abort(403, 'Campaign permission is disabled.');
         }
 
+        if ($permission === 'device' && ! $user->can_device) {
+            abort(403, 'Device workspace is disabled for this account.');
+        }
+
         return $next($request);
     }
 }

@@ -32,4 +32,50 @@ class BillingPricingService
             'duration_days' => $duration,
         ];
     }
+
+    public function deviceSlotUnitMinorForUser(User $user): int
+    {
+        $settings = BillingSetting::current();
+        $override = UserPhonePrice::query()->where('user_id', $user->id)->first();
+
+        return (int) ($override?->device_slot_price_minor ?? $settings->device_slot_price_minor);
+    }
+
+    public function esimUnitMinorForUser(User $user): int
+    {
+        $settings = BillingSetting::current();
+        $override = UserPhonePrice::query()->where('user_id', $user->id)->first();
+
+        return (int) ($override?->esim_price_minor ?? $settings->esim_price_minor);
+    }
+
+    /**
+     * @return array{amount_minor: int, currency: string, duration_days: int}
+     */
+    public function deviceSlotPricingForUser(User $user, ?int $durationDays = null): array
+    {
+        $settings = BillingSetting::current();
+        $duration = $durationDays ?? (int) $settings->default_duration_days;
+
+        return [
+            'amount_minor' => $this->deviceSlotUnitMinorForUser($user),
+            'currency' => strtoupper((string) $settings->currency),
+            'duration_days' => max(1, $duration),
+        ];
+    }
+
+    /**
+     * @return array{amount_minor: int, currency: string, duration_days: int}
+     */
+    public function esimPricingForUser(User $user, ?int $durationDays = null): array
+    {
+        $settings = BillingSetting::current();
+        $duration = $durationDays ?? (int) $settings->default_duration_days;
+
+        return [
+            'amount_minor' => $this->esimUnitMinorForUser($user),
+            'currency' => strtoupper((string) $settings->currency),
+            'duration_days' => max(1, $duration),
+        ];
+    }
 }

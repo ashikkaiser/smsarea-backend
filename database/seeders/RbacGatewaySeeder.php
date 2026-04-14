@@ -19,6 +19,7 @@ class RbacGatewaySeeder extends Seeder
                 'status' => 'active',
                 'can_chat' => true,
                 'can_campaign' => true,
+                'can_device' => true,
             ],
         );
 
@@ -31,6 +32,7 @@ class RbacGatewaySeeder extends Seeder
                 'status' => 'active',
                 'can_chat' => true,
                 'can_campaign' => true,
+                'can_device' => true,
             ],
         );
     }

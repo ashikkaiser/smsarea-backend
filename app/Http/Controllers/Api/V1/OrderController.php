@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Api\V1\Concerns\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Orders\StoreOrderRequest;
-use App\Models\BillingSetting;
 use App\Models\EsimInventory;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -13,6 +12,7 @@ use App\Services\BillingPricingService;
 use App\Services\PhoneNumberOrderService;
 use App\Services\UniversalOrderService;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class OrderController extends Controller
 {
@@ -26,7 +26,7 @@ class OrderController extends Controller
 
     public function catalog(): JsonResponse
     {
-        $settings = BillingSetting::current();
+        $user = request()->user();
         $numbers = $this->numberOrders->availableNumbersQuery()->limit(200)->get()->map(
             static fn ($n): array => [
                 'id' => $n->id,
@@ -47,24 +47,21 @@ class OrderController extends Controller
                 'status' => $e->status,
             ]);
 
-        return $this->success([
+        $data = [
             'number_products' => $numbers,
             'esim_products' => $esims,
-            'device_slot_product' => ['product_type' => OrderItem::PRODUCT_DEVICE_SLOT],
             'pricing' => [
-                'number' => $this->pricing->quoteForUser(request()->user()),
-                'device_slot' => [
-                    'amount_minor' => (int) $settings->device_slot_price_minor,
-                    'currency' => strtoupper((string) $settings->currency),
-                    'duration_days' => (int) $settings->default_duration_days,
-                ],
-                'esim' => [
-                    'amount_minor' => (int) $settings->esim_price_minor,
-                    'currency' => strtoupper((string) $settings->currency),
-                    'duration_days' => (int) $settings->default_duration_days,
-                ],
+                'number' => $this->pricing->quoteForUser($user),
+                'esim' => $this->pricing->esimPricingForUser($user),
             ],
-        ], 'Universal catalog fetched.');
+        ];
+
+        if ($user->can_device) {
+            $data['device_slot_product'] = ['product_type' => OrderItem::PRODUCT_DEVICE_SLOT];
+            $data['pricing']['device_slot'] = $this->pricing->deviceSlotPricingForUser($user);
+        }
+
+        return $this->success($data, 'Universal catalog fetched.');
     }
 
     public function pricingPreview(): JsonResponse
@@ -73,7 +70,6 @@ class OrderController extends Controller
             'product_type' => ['required', 'string', 'in:number,device_slot,esim'],
             'duration_days' => ['sometimes', 'integer', 'min:1', 'max:3650'],
         ]);
-        $settings = BillingSetting::current();
         $durationDays = isset($validated['duration_days']) ? (int) $validated['duration_days'] : null;
 
         if ($validated['product_type'] === OrderItem::PRODUCT_NUMBER) {
@@ -84,18 +80,20 @@ class OrderController extends Controller
         }
 
         if ($validated['product_type'] === OrderItem::PRODUCT_DEVICE_SLOT) {
-            return $this->success([
-                'amount_minor' => (int) $settings->device_slot_price_minor,
-                'currency' => strtoupper((string) $settings->currency),
-                'duration_days' => $durationDays ?? (int) $settings->default_duration_days,
-            ], 'Pricing preview.');
+            if (! request()->user()->can_device) {
+                return $this->failure('Device workspace is disabled for this account.', 403);
+            }
+
+            return $this->success(
+                $this->pricing->deviceSlotPricingForUser(request()->user(), $durationDays),
+                'Pricing preview.',
+            );
         }
 
-        return $this->success([
-            'amount_minor' => (int) $settings->esim_price_minor,
-            'currency' => strtoupper((string) $settings->currency),
-            'duration_days' => $durationDays ?? (int) $settings->default_duration_days,
-        ], 'Pricing preview.');
+        return $this->success(
+            $this->pricing->esimPricingForUser(request()->user(), $durationDays),
+            'Pricing preview.',
+        );
     }
 
     public function index(): JsonResponse
@@ -114,6 +112,8 @@ class OrderController extends Controller
     {
         try {
             $result = $this->orders->createCheckoutOrder($request->user(), $request->validated());
+        } catch (HttpExceptionInterface $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return $this->failure($e->getMessage(), 422);
         }

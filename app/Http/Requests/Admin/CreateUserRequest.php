@@ -29,6 +29,7 @@ class CreateUserRequest extends FormRequest
             'role' => ['required', 'in:admin,user'],
             'can_chat' => ['boolean'],
             'can_campaign' => ['boolean'],
+            'can_device' => ['boolean'],
             'status' => ['nullable', 'in:pending,active,suspended'],
         ];
     }

@@ -17,6 +17,7 @@ class AuthService
             'status' => 'pending',
             'can_chat' => false,
             'can_campaign' => false,
+            'can_device' => false,
         ]);
     }
 
@@ -31,6 +32,9 @@ class AuthService
         }
         if ($user->can_campaign) {
             $abilities[] = 'campaign';
+        }
+        if ($user->can_device) {
+            $abilities[] = 'device';
         }
 
         return $user->createToken($name, $abilities)->plainTextToken;

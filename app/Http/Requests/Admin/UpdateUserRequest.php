@@ -23,6 +23,7 @@ class UpdateUserRequest extends FormRequest
             'status' => ['required', Rule::in(['pending', 'active', 'blocked'])],
             'can_chat' => ['required', 'boolean'],
             'can_campaign' => ['required', 'boolean'],
+            'can_device' => ['required', 'boolean'],
             'password' => ['nullable', 'string', 'min:8'],
         ];
     }

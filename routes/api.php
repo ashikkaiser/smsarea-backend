@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Admin\CampaignBuilderLimitController;
 use App\Http\Controllers\Api\V1\Admin\DebugController;
 use App\Http\Controllers\Api\V1\Admin\DeviceManagementController;
 use App\Http\Controllers\Api\V1\Admin\EsimInventoryController;
+use App\Http\Controllers\Api\V1\Admin\OrderProvisionController;
 use App\Http\Controllers\Api\V1\Admin\PhoneNumberAssignmentController;
 use App\Http\Controllers\Api\V1\Admin\UserManagementController;
 use App\Http\Controllers\Api\V1\AndroidGatewayController;
@@ -69,6 +70,8 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/esims', [EsimInventoryController::class, 'store']);
             Route::patch('/esims/{esim}', [EsimInventoryController::class, 'update']);
             Route::post('/esims/import', [EsimInventoryController::class, 'import']);
+            Route::post('/orders/provision/device-slots', [OrderProvisionController::class, 'provisionDeviceSlot']);
+            Route::post('/orders/provision/esim', [OrderProvisionController::class, 'provisionEsim']);
         });
 
         Route::middleware(['permission:campaign'])->group(function (): void {
@@ -103,7 +106,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/orders/pricing-preview', [OrderController::class, 'pricingPreview']);
         Route::get('/orders/{order}', [OrderController::class, 'show']);
         Route::post('/orders', [OrderController::class, 'store']);
-        Route::get('/devices/my', [UserDeviceController::class, 'myDevices']);
+        Route::middleware(['permission:device'])->get('/devices/my', [UserDeviceController::class, 'myDevices']);
         Route::get('/esim/catalog', [EsimController::class, 'catalog']);
         Route::get('/esim/my', [EsimController::class, 'myEsims']);
         Route::post('/esim/{userEsim}/reveal', [EsimController::class, 'reveal']);

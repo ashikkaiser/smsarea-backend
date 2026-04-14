@@ -12,6 +12,8 @@ class UserPhonePrice extends Model
         'price_minor_per_period',
         'currency',
         'duration_days',
+        'device_slot_price_minor',
+        'esim_price_minor',
     ];
 
     protected function casts(): array
@@ -19,6 +21,8 @@ class UserPhonePrice extends Model
         return [
             'price_minor_per_period' => 'integer',
             'duration_days' => 'integer',
+            'device_slot_price_minor' => 'integer',
+            'esim_price_minor' => 'integer',
         ];
     }
 

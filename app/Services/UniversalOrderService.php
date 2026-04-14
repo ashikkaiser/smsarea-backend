@@ -36,51 +36,19 @@ class UniversalOrderService
             throw new RuntimeException('Self-checkout is disabled.');
         }
 
-        $type = (string) ($payload['product_type'] ?? '');
-        $quantity = max(1, (int) ($payload['quantity'] ?? 1));
-        $currency = strtoupper((string) $settings->currency);
-        $durationDays = isset($payload['duration_days']) ? (int) $payload['duration_days'] : null;
-        $productId = null;
-        $unitAmountMinor = 0;
-        $meta = [];
-
-        if ($type === OrderItem::PRODUCT_NUMBER) {
-            $productId = (int) ($payload['phone_number_id'] ?? 0);
-            $phoneNumber = PhoneNumber::query()->findOrFail($productId);
-            if (! $this->phoneNumberOrderService->availableNumbersQuery()->whereKey($phoneNumber->id)->exists()) {
-                throw new RuntimeException('This number is not available for purchase.');
-            }
-            $quote = $this->pricing->quoteForUser($user, $durationDays);
-            $unitAmountMinor = (int) $quote['amount_minor'];
-            $currency = strtoupper((string) $quote['currency']);
-            $durationDays = (int) $quote['duration_days'];
-            $quantity = 1;
-            $meta = ['phone_number' => $phoneNumber->phone_number];
-        } elseif ($type === OrderItem::PRODUCT_DEVICE_SLOT) {
-            $unitAmountMinor = (int) $settings->device_slot_price_minor;
-            $durationDays ??= (int) $settings->default_duration_days;
-        } elseif ($type === OrderItem::PRODUCT_ESIM) {
-            $productId = (int) ($payload['esim_inventory_id'] ?? 0);
-            $esim = EsimInventory::query()
-                ->whereKey($productId)
-                ->where('status', EsimInventory::STATUS_AVAILABLE)
-                ->first();
-            if (! $esim) {
-                throw new RuntimeException('The selected eSIM is not available.');
-            }
-            $unitAmountMinor = (int) $settings->esim_price_minor;
-            $durationDays ??= (int) $settings->default_duration_days;
-            $quantity = 1;
-            $meta = [
-                'zip_code' => $esim->zip_code,
-                'area_code' => $esim->area_code,
-                'masked_phone_number' => $esim->maskedPhoneNumber(),
-            ];
-        } else {
-            throw new RuntimeException('Unsupported product type.');
+        $resolved = $this->resolveOrderItemDetails($settings, $user, $payload, false);
+        $type = $resolved['type'];
+        if ($type === OrderItem::PRODUCT_DEVICE_SLOT && ! $user->can_device) {
+            abort(403, 'Device workspace is disabled for this account.');
         }
+        $productId = $resolved['product_id'];
+        $quantity = $resolved['quantity'];
+        $unitAmountMinor = $resolved['unit_amount_minor'];
+        $lineAmount = $resolved['line_amount_minor'];
+        $currency = $resolved['currency'];
+        $durationDays = $resolved['duration_days'];
+        $meta = $resolved['meta'];
 
-        $lineAmount = $unitAmountMinor * $quantity;
 
         return DB::transaction(function () use ($user, $settings, $type, $productId, $quantity, $unitAmountMinor, $lineAmount, $currency, $durationDays, $meta) {
             $order = Order::query()->create([
@@ -130,6 +98,42 @@ class UniversalOrderService
             ]);
 
             return ['order' => $order->fresh('items'), 'payment' => $payment];
+        });
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    public function provisionOrderByAdmin(User $actor, User $targetUser, array $payload): Order
+    {
+        $settings = BillingSetting::current();
+        $resolved = $this->resolveOrderItemDetails($settings, $targetUser, $payload, false);
+
+        return DB::transaction(function () use ($actor, $targetUser, $resolved): Order {
+            $order = Order::query()->create([
+                'user_id' => $targetUser->id,
+                'amount_minor' => $resolved['line_amount_minor'],
+                'currency' => $resolved['currency'],
+                'status' => Order::STATUS_PAID,
+                'source' => 'admin_assign',
+                'provider' => null,
+                'meta' => ['provisioned_by_admin_id' => $actor->id],
+            ]);
+
+            $order->items()->create([
+                'product_type' => $resolved['type'],
+                'product_id' => $resolved['product_id'],
+                'quantity' => $resolved['quantity'],
+                'unit_amount_minor' => $resolved['unit_amount_minor'],
+                'line_amount_minor' => $resolved['line_amount_minor'],
+                'currency' => $resolved['currency'],
+                'duration_days' => $resolved['duration_days'],
+                'meta' => $resolved['meta'],
+            ]);
+
+            $this->fulfillPaidOrder($order->fresh());
+
+            return $order->fresh('items');
         });
     }
 
@@ -231,5 +235,77 @@ class UniversalOrderService
         ]);
 
         Mail::to($user->email)->send(new EsimPurchaseDeliveredMail($userEsim->fresh('esim', 'user')));
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{
+     *   type:string,product_id:int|null,quantity:int,unit_amount_minor:int,line_amount_minor:int,currency:string,duration_days:int|null,meta:array<string,mixed>
+     * }
+     */
+    private function resolveOrderItemDetails(BillingSetting $settings, User $user, array $payload, bool $allowTakenEsim): array
+    {
+        $type = (string) ($payload['product_type'] ?? '');
+        $quantity = max(1, (int) ($payload['quantity'] ?? 1));
+        $currency = strtoupper((string) $settings->currency);
+        $durationDays = isset($payload['duration_days']) ? (int) $payload['duration_days'] : null;
+        $productId = null;
+        $unitAmountMinor = 0;
+        $meta = [];
+
+        if ($type === OrderItem::PRODUCT_NUMBER) {
+            $productId = (int) ($payload['phone_number_id'] ?? 0);
+            $phoneNumber = PhoneNumber::query()->findOrFail($productId);
+            if (! $this->phoneNumberOrderService->availableNumbersQuery()->whereKey($phoneNumber->id)->exists()) {
+                throw new RuntimeException('This number is not available for purchase.');
+            }
+            $quote = $this->pricing->quoteForUser($user, $durationDays);
+            $unitAmountMinor = (int) $quote['amount_minor'];
+            $currency = strtoupper((string) $quote['currency']);
+            $durationDays = (int) $quote['duration_days'];
+            $quantity = 1;
+            $meta = ['phone_number' => $phoneNumber->phone_number];
+        } elseif ($type === OrderItem::PRODUCT_DEVICE_SLOT) {
+            $slotQuote = $this->pricing->deviceSlotPricingForUser($user, $durationDays);
+            $unitAmountMinor = (int) $slotQuote['amount_minor'];
+            $currency = strtoupper((string) $slotQuote['currency']);
+            $durationDays = (int) $slotQuote['duration_days'];
+        } elseif ($type === OrderItem::PRODUCT_ESIM) {
+            $productId = (int) ($payload['esim_inventory_id'] ?? 0);
+            $esimQuery = EsimInventory::query()->whereKey($productId);
+            if (! $allowTakenEsim) {
+                $esimQuery->where('status', EsimInventory::STATUS_AVAILABLE);
+            }
+            $esim = $esimQuery->first();
+            if (! $esim) {
+                throw new RuntimeException('The selected eSIM is not available.');
+            }
+            if (! $allowTakenEsim && $esim->status !== EsimInventory::STATUS_AVAILABLE) {
+                throw new RuntimeException('The selected eSIM is not available.');
+            }
+            $esimQuote = $this->pricing->esimPricingForUser($user, $durationDays);
+            $unitAmountMinor = (int) $esimQuote['amount_minor'];
+            $currency = strtoupper((string) $esimQuote['currency']);
+            $durationDays = (int) $esimQuote['duration_days'];
+            $quantity = 1;
+            $meta = [
+                'zip_code' => $esim->zip_code,
+                'area_code' => $esim->area_code,
+                'masked_phone_number' => $esim->maskedPhoneNumber(),
+            ];
+        } else {
+            throw new RuntimeException('Unsupported product type.');
+        }
+
+        return [
+            'type' => $type,
+            'product_id' => $productId,
+            'quantity' => $quantity,
+            'unit_amount_minor' => $unitAmountMinor,
+            'line_amount_minor' => $unitAmountMinor * $quantity,
+            'currency' => $currency,
+            'duration_days' => $durationDays,
+            'meta' => $meta,
+        ];
     }
 }

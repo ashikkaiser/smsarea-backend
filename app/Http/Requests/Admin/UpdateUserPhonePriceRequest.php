@@ -21,6 +21,8 @@ class UpdateUserPhonePriceRequest extends FormRequest
             'price_minor_per_period' => ['nullable', 'integer', 'min:0'],
             'currency' => ['nullable', 'string', 'size:3'],
             'duration_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'device_slot_price_minor' => ['nullable', 'integer', 'min:0'],
+            'esim_price_minor' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

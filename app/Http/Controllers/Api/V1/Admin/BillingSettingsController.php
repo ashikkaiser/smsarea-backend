@@ -38,8 +38,14 @@ class BillingSettingsController extends Controller
         $row = UserPhonePrice::query()->where('user_id', $user->id)->first();
 
         return $this->success(
-            $row ? $row->only(['price_minor_per_period', 'currency', 'duration_days']) : null,
-            'User phone price fetched.',
+            [
+                'price_minor_per_period' => $row?->price_minor_per_period,
+                'currency' => $row?->currency,
+                'duration_days' => $row?->duration_days,
+                'device_slot_price_minor' => $row?->device_slot_price_minor,
+                'esim_price_minor' => $row?->esim_price_minor,
+            ],
+            'User product pricing fetched.',
         );
     }
 
@@ -49,25 +55,50 @@ class BillingSettingsController extends Controller
             return $this->failure('User pricing applies only to user-role accounts.', 422);
         }
         $data = $request->validated();
-        $allNull = ($data['price_minor_per_period'] ?? null) === null
-            && ($data['currency'] ?? null) === null
-            && ($data['duration_days'] ?? null) === null;
 
-        if ($allNull) {
+        $phonePrice = $data['price_minor_per_period'] ?? null;
+        $phoneCurrency = isset($data['currency']) ? strtoupper((string) $data['currency']) : null;
+        $phoneDuration = $data['duration_days'] ?? null;
+
+        $phoneAllNull = $phonePrice === null && $phoneCurrency === null && $phoneDuration === null;
+        $phoneAllSet = $phonePrice !== null && $phoneCurrency !== null && $phoneDuration !== null;
+
+        if (! $phoneAllNull && ! $phoneAllSet) {
+            return $this->failure(
+                'Provide phone price, currency, and billing period together, or omit all three to use catalog defaults for numbers.',
+                422,
+            );
+        }
+
+        $deviceSlotMinor = $data['device_slot_price_minor'] ?? null;
+        $esimMinor = $data['esim_price_minor'] ?? null;
+
+        if ($phoneAllNull && $deviceSlotMinor === null && $esimMinor === null) {
             UserPhonePrice::query()->where('user_id', $user->id)->delete();
 
-            return $this->success(null, 'User phone price override cleared.');
+            return $this->success(null, 'All product pricing overrides cleared.');
         }
 
         $row = UserPhonePrice::query()->updateOrCreate(
             ['user_id' => $user->id],
             [
-                'price_minor_per_period' => $data['price_minor_per_period'] ?? null,
-                'currency' => isset($data['currency']) ? strtoupper((string) $data['currency']) : null,
-                'duration_days' => $data['duration_days'] ?? null,
+                'price_minor_per_period' => $phoneAllSet ? $phonePrice : null,
+                'currency' => $phoneAllSet ? $phoneCurrency : null,
+                'duration_days' => $phoneAllSet ? $phoneDuration : null,
+                'device_slot_price_minor' => $deviceSlotMinor,
+                'esim_price_minor' => $esimMinor,
             ],
         );
 
-        return $this->success($row->only(['price_minor_per_period', 'currency', 'duration_days']), 'User phone price saved.');
+        return $this->success(
+            [
+                'price_minor_per_period' => $row->price_minor_per_period,
+                'currency' => $row->currency,
+                'duration_days' => $row->duration_days,
+                'device_slot_price_minor' => $row->device_slot_price_minor,
+                'esim_price_minor' => $row->esim_price_minor,
+            ],
+            'User product pricing saved.',
+        );
     }
 }

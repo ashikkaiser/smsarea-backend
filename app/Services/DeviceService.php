@@ -109,7 +109,7 @@ class DeviceService
             }
 
             if ($nextOwnerId !== null) {
-                $this->claimDeviceForOwner($device, $nextOwnerId);
+                $this->claimDeviceForOwner($device, $nextOwnerId, false);
             } else {
                 $device->forceFill([
                     'owner_user_id' => null,
@@ -248,9 +248,12 @@ class DeviceService
         ]);
     }
 
-    private function claimDeviceForOwner(Device $device, int $ownerUserId): void
+    private function claimDeviceForOwner(Device $device, int $ownerUserId, bool $requireDevicePermission = true): void
     {
         $owner = User::query()->findOrFail($ownerUserId);
+        if ($requireDevicePermission && ! $owner->can_device) {
+            throw new RuntimeException('Device workspace is disabled for this account.');
+        }
         $entitlement = UserDeviceEntitlement::query()
             ->where('user_id', $owner->id)
             ->where('status', 'active')
