@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CampaignController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\EsimController;
+use App\Http\Controllers\Api\V1\UserDeviceController;
 use App\Http\Controllers\Api\V1\NowPaymentsWebhookController;
 use App\Http\Controllers\Api\V1\NumberPurchaseController;
 use App\Http\Controllers\Api\V1\OrderController;
@@ -98,6 +99,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/numbers/{phoneNumber}/renew', [NumberPurchaseController::class, 'renew']);
         Route::get('/orders', [OrderController::class, 'index']);
         Route::post('/orders', [OrderController::class, 'store']);
+        Route::get('/devices/my', [UserDeviceController::class, 'myDevices']);
         Route::get('/esim/catalog', [EsimController::class, 'catalog']);
         Route::get('/esim/my', [EsimController::class, 'myEsims']);
         Route::post('/esim/{userEsim}/reveal', [EsimController::class, 'reveal']);
