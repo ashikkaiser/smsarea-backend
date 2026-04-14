@@ -56,7 +56,12 @@ class AndroidGatewayController extends Controller
             return response()->json(['message' => 'Invalid registration token'], 422);
         }
 
-        $device = $this->deviceService->registerFromAndroid($data);
+        try {
+            $device = $this->deviceService->registerFromAndroid($data);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         $this->deviceService->consumeRegistrationToken($data['token']);
 
         Log::info('android.device.registered', [

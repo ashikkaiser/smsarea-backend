@@ -106,7 +106,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/orders/pricing-preview', [OrderController::class, 'pricingPreview']);
         Route::get('/orders/{order}', [OrderController::class, 'show']);
         Route::post('/orders', [OrderController::class, 'store']);
-        Route::middleware(['permission:device'])->get('/devices/my', [UserDeviceController::class, 'myDevices']);
+        Route::middleware(['permission:device'])->group(function (): void {
+            Route::get('/devices/my', [UserDeviceController::class, 'myDevices']);
+            Route::post('/devices/claim-code', [UserDeviceController::class, 'issueDeviceClaimCode']);
+        });
         Route::get('/esim/catalog', [EsimController::class, 'catalog']);
         Route::get('/esim/my', [EsimController::class, 'myEsims']);
         Route::post('/esim/{userEsim}/reveal', [EsimController::class, 'reveal']);

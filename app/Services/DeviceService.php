@@ -15,6 +15,8 @@ use RuntimeException;
 
 class DeviceService
 {
+    public const API_TOKEN_TYPE_USER_DEVICE_CLAIM = 'user_device_claim';
+
     public function __construct(
         private readonly PhoneNumberService $phoneNumberService,
     ) {}
@@ -62,8 +64,9 @@ class DeviceService
                 ],
             );
 
-            if (isset($payload['owner_user_id']) && $payload['owner_user_id'] !== null) {
-                $this->claimDeviceForOwner($device, (int) $payload['owner_user_id']);
+            $effectiveOwnerId = $this->resolveOwnerUserIdFromAndroidPayload($payload);
+            if ($effectiveOwnerId !== null) {
+                $this->claimDeviceForOwner($device, $effectiveOwnerId);
             }
 
             foreach ($simInfo as $sim) {
@@ -140,7 +143,7 @@ class DeviceService
             return false;
         }
 
-        if (! in_array($record->type, ['register_device', 'register_device_otp'], true)) {
+        if (! in_array($record->type, ['register_device', 'register_device_otp', self::API_TOKEN_TYPE_USER_DEVICE_CLAIM], true)) {
             return false;
         }
 
@@ -148,7 +151,7 @@ class DeviceService
             return false;
         }
 
-        if ($record->type === 'register_device_otp' && $record->used_at) {
+        if (in_array($record->type, ['register_device_otp', self::API_TOKEN_TYPE_USER_DEVICE_CLAIM], true) && $record->used_at) {
             return false;
         }
 
@@ -159,9 +162,53 @@ class DeviceService
     {
         $normalized = $this->normalizeRegistrationTokenInput($token);
         $record = ApiToken::query()->where('token', hash('sha256', $normalized))->first();
-        if ($record && $record->type === 'register_device_otp') {
+        if ($record && in_array($record->type, ['register_device_otp', self::API_TOKEN_TYPE_USER_DEVICE_CLAIM], true)) {
             $record->forceFill(['used_at' => now()])->save();
         }
+    }
+
+    /**
+     * When the registration token is a user-issued pairing code, owner comes from the token (not from a raw user id).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function resolveOwnerUserIdFromAndroidPayload(array $payload): ?int
+    {
+        $claimOwner = $this->ownerUserIdFromUserDeviceClaimToken((string) ($payload['token'] ?? ''));
+        if ($claimOwner !== null) {
+            if (isset($payload['owner_user_id']) && $payload['owner_user_id'] !== null && (int) $payload['owner_user_id'] !== $claimOwner) {
+                throw new RuntimeException('owner_user_id does not match the account linked to this pairing code.');
+            }
+
+            return $claimOwner;
+        }
+
+        if (isset($payload['owner_user_id']) && $payload['owner_user_id'] !== null) {
+            return (int) $payload['owner_user_id'];
+        }
+
+        return null;
+    }
+
+    private function ownerUserIdFromUserDeviceClaimToken(string $token): ?int
+    {
+        if ($token === '') {
+            return null;
+        }
+        $normalized = $this->normalizeRegistrationTokenInput($token);
+        $record = ApiToken::query()->where('token', hash('sha256', $normalized))->first();
+        if (! $record || $record->type !== self::API_TOKEN_TYPE_USER_DEVICE_CLAIM) {
+            return null;
+        }
+        if ($record->expires_at && $record->expires_at->isPast()) {
+            return null;
+        }
+        if ($record->used_at) {
+            return null;
+        }
+        $id = $record->meta['owner_user_id'] ?? null;
+
+        return $id !== null ? (int) $id : null;
     }
 
     public function normalizeSimInfo(mixed $simInfo): array

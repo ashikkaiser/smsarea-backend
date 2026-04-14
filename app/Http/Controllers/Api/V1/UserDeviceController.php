@@ -4,13 +4,52 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Api\V1\Concerns\ApiResponse;
 use App\Http\Controllers\Controller;
+use App\Models\ApiToken;
 use App\Models\Device;
 use App\Models\UserDeviceEntitlement;
+use App\Services\DeviceService;
 use Illuminate\Http\JsonResponse;
 
 class UserDeviceController extends Controller
 {
     use ApiResponse;
+
+    public function issueDeviceClaimCode(): JsonResponse
+    {
+        $user = request()->user();
+
+        ApiToken::query()
+            ->where('type', DeviceService::API_TOKEN_TYPE_USER_DEVICE_CLAIM)
+            ->where('created_by', $user->id)
+            ->whereNull('used_at')
+            ->delete();
+
+        $alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+        $plain = '';
+        for ($i = 0; $i < 8; $i++) {
+            $plain .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        $plainUpper = strtoupper($plain);
+        $expiresAt = now()->addMinutes(15);
+
+        ApiToken::query()->create([
+            'name' => 'user-device-claim',
+            'token' => hash('sha256', $plainUpper),
+            'type' => DeviceService::API_TOKEN_TYPE_USER_DEVICE_CLAIM,
+            'created_by' => $user->id,
+            'expires_at' => $expiresAt,
+            'meta' => ['owner_user_id' => $user->id],
+        ]);
+
+        $display = substr($plainUpper, 0, 4).'-'.substr($plainUpper, 4, 4);
+
+        return $this->success([
+            'code' => $display,
+            'code_raw' => $plainUpper,
+            'expires_at' => $expiresAt->toIso8601String(),
+        ], 'Pairing code issued. Enter this as the registration token in the Android app (one device per code).');
+    }
 
     public function myDevices(): JsonResponse
     {
@@ -49,7 +88,6 @@ class UserDeviceController extends Controller
             });
 
         return $this->success([
-            'user_id' => $user->id,
             'entitlement' => $entitlement ? [
                 'slots_purchased' => (int) $entitlement->slots_purchased,
                 'slots_used' => (int) $entitlement->slots_used,

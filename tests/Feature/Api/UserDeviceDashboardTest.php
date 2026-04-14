@@ -14,7 +14,7 @@ class UserDeviceDashboardTest extends TestCase
 
     public function test_user_can_list_owned_devices_and_entitlement(): void
     {
-        $user = User::factory()->create(['role' => 'user', 'status' => 'active']);
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active', 'can_device' => true]);
         $token = $user->createToken('t', ['user'])->plainTextToken;
 
         UserDeviceEntitlement::query()->create([
@@ -36,7 +36,6 @@ class UserDeviceDashboardTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('success', true);
-        $response->assertJsonPath('data.user_id', $user->id);
         $response->assertJsonPath('data.entitlement.slots_available', 1);
         $response->assertJsonPath('data.devices.0.id', $device->id);
         $response->assertJsonPath('data.devices.0.device_uid', 'test-device-uid-1');
