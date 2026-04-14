@@ -2,19 +2,18 @@
 
 namespace App\Jobs;
 
-use App\Models\AiUsageLog;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\AiChatService;
+use App\Services\CampaignAiHumanReplyDelay;
 use App\Services\CampaignAiInboundService;
-use App\Services\ChatService;
-use App\Services\SmsGatewayService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -35,8 +34,6 @@ class ProcessCampaignAiInboundReply implements ShouldQueue
     public function handle(
         CampaignAiInboundService $campaignAi,
         AiChatService $aiChat,
-        ChatService $chatService,
-        SmsGatewayService $smsGatewayService,
     ): void {
         $debounceSeconds = max(2, min(90, (int) config('services.ai.campaign_inbound_debounce_seconds', 10)));
         $debounceKey = 'campaign_ai_debounce_until:'.$this->conversationId;
@@ -116,51 +113,25 @@ class ProcessCampaignAiInboundReply implements ShouldQueue
                 return;
             }
 
-            $anchorInboundId = $latestInbound?->id;
+            $humanDelay = CampaignAiHumanReplyDelay::secondsBeforeSend($reply);
 
-            AiUsageLog::query()->create([
-                'user_id' => $campaign->user_id,
-                'campaign_id' => $campaign->id,
-                'source' => AiUsageLog::SOURCE_CAMPAIGN_INBOUND,
-                'conversation_id' => $conversation->id,
-                'message_id' => $anchorInboundId,
-                'model' => $completion->model,
-                'prompt_tokens' => $completion->promptTokens,
-                'completion_tokens' => $completion->completionTokens,
-                'total_tokens' => $completion->totalTokens,
-            ]);
+            $deliver = new DeliverCampaignAiOutboundReply(
+                conversationId: $conversation->id,
+                campaignId: $campaign->id,
+                campaignOwnerUserId: $campaign->user_id,
+                reply: $reply,
+                anchorInboundMessageId: $latestInbound?->id,
+                model: $completion->model,
+                promptTokens: $completion->promptTokens,
+                completionTokens: $completion->completionTokens,
+                totalTokens: $completion->totalTokens,
+            );
 
-            $outbound = $chatService->addOutboundMessage($conversation, [
-                'contact_number' => $conversation->contact_number,
-                'message' => $reply,
-                'message_type' => 'sms',
-            ]);
-
-            $outbound->forceFill([
-                'meta' => array_merge(is_array($outbound->meta) ? $outbound->meta : [], [
-                    'source' => 'campaign_ai',
-                    'campaign_id' => $campaign->id,
-                    'inbound_message_id' => $anchorInboundId,
-                ]),
-            ])->save();
-
-            $phone->loadMissing('device');
-            $smsGatewayService->pushOutboundToDevice($outbound, $phone, $conversation);
-
-            $uid = (int) ($conversation->assigned_user_id ?? 0);
-            if ($uid > 0) {
-                $smsGatewayService->pushChatUpdateToUser($uid, [
-                    'event' => 'chat_updated',
-                    'conversation_id' => (int) $conversation->id,
-                ]);
+            if ($humanDelay <= 0) {
+                Bus::dispatchSync($deliver);
+            } else {
+                DeliverCampaignAiOutboundReply::dispatch($deliver)->delay(now()->addSeconds($humanDelay));
             }
-
-            Log::info('campaign_ai.inbound_replied', [
-                'conversation_id' => $conversation->id,
-                'outbound_message_id' => $outbound->id,
-                'campaign_id' => $campaign->id,
-                'inbound_anchor_message_id' => $anchorInboundId,
-            ]);
         } finally {
             $lock->release();
         }

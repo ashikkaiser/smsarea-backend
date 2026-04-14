@@ -22,6 +22,7 @@ class CampaignAiInboundDebouncedReplyTest extends TestCase
     public function test_job_sends_single_reply_after_two_rapid_inbound_lines(): void
     {
         Config::set('services.ai.url', 'http://fake-ai.test');
+        Config::set('services.ai.campaign_inbound_human_delay_max_seconds', 0);
         Http::fake([
             'http://fake-ai.test/api/chat' => Http::response([
                 'message' => ['role' => 'assistant', 'content' => 'One combined reply.'],

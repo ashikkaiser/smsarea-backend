@@ -63,6 +63,15 @@ return [
          */
         'campaign_inbound_debounce_seconds' => max(2, min(90, (int) env('AI_CAMPAIGN_INBOUND_DEBOUNCE_SECONDS', 10))),
         /**
+         * Human-like pause after AI text before sending SMS. Total delay = base + ceil(chars / cps), capped at max.
+         * Set max to 0 to disable human delay entirely.
+         */
+        'campaign_inbound_human_delay_base_seconds' => max(0, min(30, (int) env('AI_CAMPAIGN_INBOUND_HUMAN_DELAY_SECONDS', 2))),
+        /** Effective typing speed for delay scaling (chars per second). 0 = use base only (no length scaling). */
+        'campaign_inbound_human_chars_per_second' => max(0, (int) env('AI_CAMPAIGN_INBOUND_HUMAN_CHARS_PER_SECOND', 12)),
+        /** Upper bound on total human delay seconds (0 disables). */
+        'campaign_inbound_human_delay_max_seconds' => max(0, min(60, (int) env('AI_CAMPAIGN_INBOUND_HUMAN_DELAY_MAX_SECONDS', 30))),
+        /**
          * Appended to every campaign AI system message so the model uses thread context and stays consistent.
          * Set AI_CAMPAIGN_INBOUND_GUARDRAILS to an empty string in .env to disable.
          */
