@@ -36,6 +36,7 @@ class AndroidGatewayController extends Controller
             'model' => ['nullable', 'string'],
             'os' => ['nullable', 'string'],
             'sim_info' => ['required'],
+            'owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         Log::info('android.device.register_request', [
@@ -80,6 +81,7 @@ class AndroidGatewayController extends Controller
             'os' => ['nullable', 'string'],
             'sim_info' => ['required'],
             'action' => ['nullable', 'string'],
+            'owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         Log::info('android.device.status_request', [

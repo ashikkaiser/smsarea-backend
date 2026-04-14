@@ -6,14 +6,17 @@ use App\Http\Controllers\Api\V1\Admin\BillingSettingsController;
 use App\Http\Controllers\Api\V1\Admin\CampaignBuilderLimitController;
 use App\Http\Controllers\Api\V1\Admin\DebugController;
 use App\Http\Controllers\Api\V1\Admin\DeviceManagementController;
+use App\Http\Controllers\Api\V1\Admin\EsimInventoryController;
 use App\Http\Controllers\Api\V1\Admin\PhoneNumberAssignmentController;
 use App\Http\Controllers\Api\V1\Admin\UserManagementController;
 use App\Http\Controllers\Api\V1\AndroidGatewayController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CampaignController;
 use App\Http\Controllers\Api\V1\ChatController;
+use App\Http\Controllers\Api\V1\EsimController;
 use App\Http\Controllers\Api\V1\NowPaymentsWebhookController;
 use App\Http\Controllers\Api\V1\NumberPurchaseController;
+use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PhoneNumberMarketplaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -60,6 +63,10 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/debug/messages/{message}', [DebugController::class, 'messageById']);
             Route::post('/ai/chat', [AiPlaygroundController::class, 'chat']);
             Route::get('/ai-usage', [AiUsageController::class, 'index']);
+            Route::get('/esims', [EsimInventoryController::class, 'index']);
+            Route::post('/esims', [EsimInventoryController::class, 'store']);
+            Route::patch('/esims/{esim}', [EsimInventoryController::class, 'update']);
+            Route::post('/esims/import', [EsimInventoryController::class, 'import']);
         });
 
         Route::middleware(['permission:campaign'])->group(function (): void {
@@ -89,6 +96,11 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/numbers/orders', [PhoneNumberMarketplaceController::class, 'store']);
         Route::post('/numbers/purchase', [NumberPurchaseController::class, 'purchase']);
         Route::post('/numbers/{phoneNumber}/renew', [NumberPurchaseController::class, 'renew']);
+        Route::get('/orders', [OrderController::class, 'index']);
+        Route::post('/orders', [OrderController::class, 'store']);
+        Route::get('/esim/catalog', [EsimController::class, 'catalog']);
+        Route::get('/esim/my', [EsimController::class, 'myEsims']);
+        Route::post('/esim/{userEsim}/reveal', [EsimController::class, 'reveal']);
     });
 });
 

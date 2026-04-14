@@ -27,7 +27,7 @@ class DeviceManagementController extends Controller
 
     public function index(): JsonResponse
     {
-        $rows = Device::query()->latest()->paginate(20);
+        $rows = Device::query()->with('owner:id,name,email')->latest()->paginate(20);
         $prefix = (string) config('services.sms_gateway.presence_prefix', 'sms_gateway:presence:');
 
         $keys = $rows->getCollection()
@@ -68,6 +68,7 @@ class DeviceManagementController extends Controller
     public function show(Device $device): JsonResponse
     {
         $device->load([
+            'owner:id,name,email',
             'phoneNumbers' => function ($query): void {
                 $query->with(['users:id,name,email'])
                     ->orderBy('sim_slot')

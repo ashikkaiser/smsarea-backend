@@ -6,12 +6,19 @@ use App\Models\ApiToken;
 use App\Models\Device;
 use App\Models\DeviceSimSnapshot;
 use App\Models\PhoneNumber;
+use App\Models\User;
+use App\Models\UserDeviceEntitlement;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class DeviceService
 {
+    public function __construct(
+        private readonly PhoneNumberService $phoneNumberService,
+    ) {}
+
     public function createDevice(array $data): Device
     {
         $device = Device::create([
@@ -55,6 +62,10 @@ class DeviceService
                 ],
             );
 
+            if (isset($payload['owner_user_id']) && $payload['owner_user_id'] !== null) {
+                $this->claimDeviceForOwner($device, (int) $payload['owner_user_id']);
+            }
+
             foreach ($simInfo as $sim) {
                 $slot = (int) Arr::get($sim, 'slot', 0);
                 $this->recordSimSnapshotIfChanged(
@@ -65,6 +76,8 @@ class DeviceService
                 );
                 $this->upsertPhoneNumberForSim($device, $sim, $payload['device_uid']);
             }
+
+            $this->autoAssignActiveNumbersToOwner($device);
 
             return $device;
         });
@@ -134,6 +147,7 @@ class DeviceService
         $rawNumber = Arr::get($sim, 'number');
         $carrier = Arr::get($sim, 'carrier');
 
+        /** @var PhoneNumber|null $match */
         $match = null;
         if (is_string($rawNumber) && trim($rawNumber) !== '') {
             $match = PhoneNumber::query()
@@ -194,5 +208,60 @@ class DeviceService
             'carrier_name' => $carrierName === null || $carrierName === '' ? null : (is_scalar($carrierName) ? (string) $carrierName : null),
             'observed_at' => now(),
         ]);
+    }
+
+    private function claimDeviceForOwner(Device $device, int $ownerUserId): void
+    {
+        $owner = User::query()->findOrFail($ownerUserId);
+        $entitlement = UserDeviceEntitlement::query()
+            ->where('user_id', $owner->id)
+            ->where('status', 'active')
+            ->first();
+        if (! $entitlement) {
+            throw new RuntimeException('No active device-slot entitlement found for this user.');
+        }
+
+        $ownsThisAlready = (int) $device->owner_user_id === (int) $owner->id;
+        if (! $ownsThisAlready) {
+            if ($entitlement->availableSlots() <= 0) {
+                throw new RuntimeException('No available device slots for this user.');
+            }
+            $entitlement->forceFill([
+                'slots_used' => (int) $entitlement->slots_used + 1,
+            ])->save();
+        }
+
+        $device->forceFill([
+            'owner_user_id' => $owner->id,
+            'claimed_at' => $device->claimed_at ?? now(),
+        ])->save();
+    }
+
+    private function autoAssignActiveNumbersToOwner(Device $device): void
+    {
+        if (! $device->owner_user_id || $device->status !== 'online') {
+            return;
+        }
+
+        $owner = User::query()->find($device->owner_user_id);
+        if (! $owner) {
+            return;
+        }
+
+        $device->loadMissing('phoneNumbers');
+        foreach ($device->phoneNumbers as $phoneNumber) {
+            if ((string) $phoneNumber->status !== 'active') {
+                continue;
+            }
+            $alreadyAssigned = $phoneNumber->users()
+                ->where('users.id', $owner->id)
+                ->where('phone_number_user.status', 'active')
+                ->exists();
+            if ($alreadyAssigned) {
+                continue;
+            }
+
+            $this->phoneNumberService->assignToUser($phoneNumber, $owner, $owner);
+        }
     }
 }

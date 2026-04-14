@@ -8,6 +8,8 @@ class BillingSetting extends Model
 {
     protected $fillable = [
         'default_price_minor',
+        'device_slot_price_minor',
+        'esim_price_minor',
         'currency',
         'default_duration_days',
         'self_checkout_enabled',
@@ -23,6 +25,8 @@ class BillingSetting extends Model
     {
         return [
             'default_price_minor' => 'integer',
+            'device_slot_price_minor' => 'integer',
+            'esim_price_minor' => 'integer',
             'default_duration_days' => 'integer',
             'self_checkout_enabled' => 'boolean',
             'nowpayments_sandbox' => 'boolean',
@@ -46,6 +50,8 @@ class BillingSetting extends Model
 
         return [
             'default_price_minor' => (int) $this->default_price_minor,
+            'device_slot_price_minor' => (int) $this->device_slot_price_minor,
+            'esim_price_minor' => (int) $this->esim_price_minor,
             'currency' => strtoupper((string) $this->currency),
             'default_duration_days' => (int) $this->default_duration_days,
             'self_checkout_enabled' => (bool) $this->self_checkout_enabled,

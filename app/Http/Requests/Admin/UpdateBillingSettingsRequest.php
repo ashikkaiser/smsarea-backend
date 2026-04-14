@@ -19,6 +19,8 @@ class UpdateBillingSettingsRequest extends FormRequest
     {
         return [
             'default_price_minor' => ['sometimes', 'integer', 'min:0'],
+            'device_slot_price_minor' => ['sometimes', 'integer', 'min:0'],
+            'esim_price_minor' => ['sometimes', 'integer', 'min:0'],
             'currency' => ['sometimes', 'string', 'size:3'],
             'default_duration_days' => ['sometimes', 'integer', 'min:1', 'max:3650'],
             'self_checkout_enabled' => ['sometimes', 'boolean'],

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -51,5 +52,25 @@ class User extends Authenticatable
         return $this->belongsToMany(PhoneNumber::class, 'phone_number_user')
             ->withPivot(['id', 'assigned_by', 'assigned_at', 'unassigned_at', 'status'])
             ->withTimestamps();
+    }
+
+    public function ownedDevices(): HasMany
+    {
+        return $this->hasMany(Device::class, 'owner_user_id');
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function deviceEntitlement(): HasOne
+    {
+        return $this->hasOne(UserDeviceEntitlement::class);
+    }
+
+    public function esims(): HasMany
+    {
+        return $this->hasMany(UserEsim::class);
     }
 }
