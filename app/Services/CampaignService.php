@@ -134,7 +134,7 @@ class CampaignService
     }
 
     /**
-     * Activating a campaign requires outbound lines and a complete message ladder (entry, reply, follow-up).
+     * Activating a campaign requires outbound lines and reply + follow-up steps (entry uses AI / other flows).
      *
      * @throws ValidationException
      */
@@ -145,13 +145,6 @@ class CampaignService
         if ($campaign->phoneNumbers->isEmpty()) {
             throw ValidationException::withMessages([
                 'status' => __('Assign at least one phone number to this campaign before activating.'),
-            ]);
-        }
-
-        $entry = trim((string) ($campaign->entry_message_template ?? ''));
-        if ($entry === '') {
-            throw ValidationException::withMessages([
-                'status' => __('Set an entry message template before activating.'),
             ]);
         }
 
