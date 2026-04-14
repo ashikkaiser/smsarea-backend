@@ -30,7 +30,8 @@ class AdminOrderProvisionTest extends TestCase
 
         $this->assertDatabaseHas('orders', [
             'user_id' => $user->id,
-            'source' => 'admin_assign',
+            'source' => 'admin_checkout',
+            'provider' => 'admin',
             'status' => 'fulfilled',
             'amount_minor' => 2400,
         ]);
@@ -44,6 +45,44 @@ class AdminOrderProvisionTest extends TestCase
         $this->assertNotNull($entitlement);
         $this->assertSame(2, (int) $entitlement->slots_purchased);
 
+    }
+
+    public function test_admin_can_provision_device_slots_when_self_checkout_disabled(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active', 'can_device' => true]);
+        $adminToken = $admin->createToken('admin')->plainTextToken;
+
+        BillingSetting::current()->update([
+            'device_slot_price_minor' => 500,
+            'self_checkout_enabled' => false,
+        ]);
+
+        $response = $this->withToken($adminToken)->postJson('/api/v1/admin/orders/provision/device-slots', [
+            'user_id' => $user->id,
+            'quantity' => 1,
+        ]);
+        $response->assertOk();
+
+        $this->assertDatabaseHas('orders', [
+            'user_id' => $user->id,
+            'source' => 'admin_checkout',
+            'status' => 'fulfilled',
+        ]);
+    }
+
+    public function test_admin_cannot_provision_device_slots_when_user_device_workspace_disabled(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active', 'can_device' => false]);
+        $adminToken = $admin->createToken('admin')->plainTextToken;
+
+        BillingSetting::current()->update(['device_slot_price_minor' => 500]);
+
+        $this->withToken($adminToken)->postJson('/api/v1/admin/orders/provision/device-slots', [
+            'user_id' => $user->id,
+            'quantity' => 1,
+        ])->assertStatus(422);
     }
 
     public function test_admin_can_provision_esim_for_user_with_non_zero_order_amount(): void
@@ -69,7 +108,8 @@ class AdminOrderProvisionTest extends TestCase
 
         $this->assertDatabaseHas('orders', [
             'user_id' => $user->id,
-            'source' => 'admin_assign',
+            'source' => 'admin_checkout',
+            'provider' => 'admin',
             'status' => 'fulfilled',
             'amount_minor' => 3500,
         ]);

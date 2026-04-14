@@ -69,6 +69,26 @@ class UserDevicePermissionTest extends TestCase
         $response->assertJsonMissingPath('data.pricing.device_slot');
     }
 
+    public function test_device_slot_checkout_rejected_when_self_checkout_disabled(): void
+    {
+        BillingSetting::current()->update([
+            'device_slot_price_minor' => 500,
+            'self_checkout_enabled' => false,
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'status' => 'active',
+            'can_device' => true,
+        ]);
+        $token = $user->createToken('t', ['user'])->plainTextToken;
+
+        $this->withToken($token)->postJson('/api/v1/orders', [
+            'product_type' => 'device_slot',
+            'quantity' => 1,
+        ])->assertStatus(422);
+    }
+
     public function test_pricing_preview_device_slot_requires_can_device(): void
     {
         $user = User::factory()->create([

@@ -49,7 +49,6 @@ class UniversalOrderService
         $durationDays = $resolved['duration_days'];
         $meta = $resolved['meta'];
 
-
         return DB::transaction(function () use ($user, $settings, $type, $productId, $quantity, $unitAmountMinor, $lineAmount, $currency, $durationDays, $meta) {
             $order = Order::query()->create([
                 'user_id' => $user->id,
@@ -109,15 +108,22 @@ class UniversalOrderService
         $settings = BillingSetting::current();
         $resolved = $this->resolveOrderItemDetails($settings, $targetUser, $payload, false);
 
+        if ($resolved['type'] === OrderItem::PRODUCT_DEVICE_SLOT && ! $targetUser->can_device) {
+            throw new RuntimeException('Device workspace is disabled for this account. Enable it before assigning device slots.');
+        }
+
         return DB::transaction(function () use ($actor, $targetUser, $resolved): Order {
             $order = Order::query()->create([
                 'user_id' => $targetUser->id,
                 'amount_minor' => $resolved['line_amount_minor'],
                 'currency' => $resolved['currency'],
-                'status' => Order::STATUS_PAID,
-                'source' => 'admin_assign',
-                'provider' => null,
-                'meta' => ['provisioned_by_admin_id' => $actor->id],
+                'status' => Order::STATUS_AWAITING_PAYMENT,
+                'source' => 'admin_checkout',
+                'provider' => 'admin',
+                'meta' => [
+                    'provisioned_by_admin_id' => $actor->id,
+                    'recorded_without_payment_gateway' => true,
+                ],
             ]);
 
             $order->items()->create([
@@ -131,6 +137,7 @@ class UniversalOrderService
                 'meta' => $resolved['meta'],
             ]);
 
+            $this->markOrderPaidIfAwaiting($order);
             $this->fulfillPaidOrder($order->fresh());
 
             return $order->fresh('items');
