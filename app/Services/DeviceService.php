@@ -83,6 +83,44 @@ class DeviceService
         });
     }
 
+    public function updateDeviceOwner(Device $device, ?int $ownerUserId): Device
+    {
+        return DB::transaction(function () use ($device, $ownerUserId): Device {
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
+            $currentOwnerId = $device->owner_user_id ? (int) $device->owner_user_id : null;
+            $nextOwnerId = $ownerUserId !== null ? (int) $ownerUserId : null;
+
+            if ($currentOwnerId === $nextOwnerId) {
+                return $device;
+            }
+
+            if ($currentOwnerId !== null) {
+                /** @var UserDeviceEntitlement|null $currentEntitlement */
+                $currentEntitlement = UserDeviceEntitlement::query()
+                    ->where('user_id', $currentOwnerId)
+                    ->where('status', 'active')
+                    ->lockForUpdate()
+                    ->first();
+                if ($currentEntitlement) {
+                    $currentEntitlement->forceFill([
+                        'slots_used' => max(0, (int) $currentEntitlement->slots_used - 1),
+                    ])->save();
+                }
+            }
+
+            if ($nextOwnerId !== null) {
+                $this->claimDeviceForOwner($device, $nextOwnerId);
+            } else {
+                $device->forceFill([
+                    'owner_user_id' => null,
+                    'claimed_at' => null,
+                ])->save();
+            }
+
+            return $device->fresh();
+        });
+    }
+
     public function normalizeRegistrationTokenInput(string $token): string
     {
         $t = str_replace(["\t", ' ', '-'], '', trim($token));

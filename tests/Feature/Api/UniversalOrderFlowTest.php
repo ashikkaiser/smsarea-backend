@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PhoneNumber;
 use App\Models\User;
+use App\Services\UniversalOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -138,5 +139,44 @@ class UniversalOrderFlowTest extends TestCase
             'user_id' => $user->id,
         ]);
         $this->assertNotNull($userEsim->fresh()->revealed_at);
+    }
+
+    public function test_universal_order_fulfillment_is_idempotent_for_esim(): void
+    {
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active']);
+        $order = Order::query()->create([
+            'user_id' => $user->id,
+            'amount_minor' => 1500,
+            'currency' => 'USD',
+            'status' => Order::STATUS_PAID,
+        ]);
+        $esim = EsimInventory::query()->create([
+            'iccid' => '8901000000000000003',
+            'phone_number' => '+12025550333',
+            'status' => 'available',
+        ]);
+        OrderItem::query()->create([
+            'order_id' => $order->id,
+            'product_type' => 'esim',
+            'product_id' => $esim->id,
+            'quantity' => 1,
+            'unit_amount_minor' => 1500,
+            'line_amount_minor' => 1500,
+            'currency' => 'USD',
+        ]);
+
+        $service = app(UniversalOrderService::class);
+        $service->fulfillPaidOrder($order->fresh());
+        $service->fulfillPaidOrder($order->fresh());
+
+        $this->assertDatabaseCount('user_esims', 1);
+        $this->assertDatabaseHas('user_esims', [
+            'user_id' => $user->id,
+            'esim_inventory_id' => $esim->id,
+        ]);
+        $this->assertDatabaseHas('esim_inventories', [
+            'id' => $esim->id,
+            'status' => 'sold',
+        ]);
     }
 }

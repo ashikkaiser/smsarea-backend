@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\UpdateDeviceRequest;
 use App\Models\ApiToken;
 use App\Models\Device;
 use App\Models\PhoneNumber;
+use App\Models\UserDeviceEntitlement;
 use App\Services\DeviceService;
 use App\Services\UpstashPresenceService;
 use Illuminate\Http\JsonResponse;
@@ -57,6 +58,18 @@ class DeviceManagementController extends Controller
                 if ($db === null || $fromRedis->greaterThan($db)) {
                     $device->setAttribute('last_seen_at', $fromRedis->toIso8601String());
                 }
+            }
+
+            $ownerId = $device->owner_user_id ? (int) $device->owner_user_id : null;
+            if ($ownerId !== null) {
+                $entitlement = UserDeviceEntitlement::query()->where('user_id', $ownerId)->first();
+                $device->setAttribute('owner_slot_summary', $entitlement ? [
+                    'slots_purchased' => (int) $entitlement->slots_purchased,
+                    'slots_used' => (int) $entitlement->slots_used,
+                    'slots_available' => $entitlement->availableSlots(),
+                ] : null);
+            } else {
+                $device->setAttribute('owner_slot_summary', null);
             }
 
             return $device;
@@ -115,6 +128,21 @@ class DeviceManagementController extends Controller
         $device->update($request->validated());
 
         return $this->success($device->fresh(), 'Device updated.');
+    }
+
+    public function updateOwner(Request $request, Device $device): JsonResponse
+    {
+        $data = $request->validate([
+            'owner_user_id' => ['nullable', 'integer', 'exists:users,id'],
+        ]);
+
+        try {
+            $updated = $this->deviceService->updateDeviceOwner($device, $data['owner_user_id'] ?? null);
+        } catch (\Throwable $e) {
+            return $this->failure($e->getMessage(), 422);
+        }
+
+        return $this->success($updated->load('owner:id,name,email'), 'Device owner updated.');
     }
 
     public function destroy(Device $device): JsonResponse

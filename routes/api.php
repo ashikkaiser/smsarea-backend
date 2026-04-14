@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/devices/{device}', [DeviceManagementController::class, 'show']);
             Route::post('/devices', [DeviceManagementController::class, 'store']);
             Route::patch('/devices/{device}', [DeviceManagementController::class, 'update']);
+            Route::patch('/devices/{device}/owner', [DeviceManagementController::class, 'updateOwner']);
             Route::delete('/devices/{device}', [DeviceManagementController::class, 'destroy']);
             Route::post('/devices/registration-token', [DeviceManagementController::class, 'issueRegistrationToken']);
             Route::post('/devices/registration-otp', [DeviceManagementController::class, 'issueRegistrationOtp']);
@@ -98,6 +99,9 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/numbers/purchase', [NumberPurchaseController::class, 'purchase']);
         Route::post('/numbers/{phoneNumber}/renew', [NumberPurchaseController::class, 'renew']);
         Route::get('/orders', [OrderController::class, 'index']);
+        Route::get('/orders/catalog', [OrderController::class, 'catalog']);
+        Route::get('/orders/pricing-preview', [OrderController::class, 'pricingPreview']);
+        Route::get('/orders/{order}', [OrderController::class, 'show']);
         Route::post('/orders', [OrderController::class, 'store']);
         Route::get('/devices/my', [UserDeviceController::class, 'myDevices']);
         Route::get('/esim/catalog', [EsimController::class, 'catalog']);
