@@ -82,4 +82,36 @@ class UserDeviceClaimCodeTest extends TestCase
 
         $this->withToken($web)->postJson('/api/v1/devices/claim-code')->assertForbidden();
     }
+
+    public function test_issue_claim_code_rejected_without_available_slot(): void
+    {
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active', 'can_device' => true]);
+        $web = $user->createToken('w', ['user'])->plainTextToken;
+
+        $this->withToken($web)->postJson('/api/v1/devices/claim-code')->assertStatus(422);
+
+        UserDeviceEntitlement::query()->create([
+            'user_id' => $user->id,
+            'slots_purchased' => 1,
+            'slots_used' => 1,
+            'status' => 'active',
+        ]);
+
+        $this->withToken($web)->postJson('/api/v1/devices/claim-code')->assertStatus(422);
+    }
+
+    public function test_issue_claim_code_rejected_when_valid_until_passed(): void
+    {
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active', 'can_device' => true]);
+        UserDeviceEntitlement::query()->create([
+            'user_id' => $user->id,
+            'slots_purchased' => 1,
+            'slots_used' => 0,
+            'status' => 'active',
+            'valid_until' => now()->subDay(),
+        ]);
+        $web = $user->createToken('w', ['user'])->plainTextToken;
+
+        $this->withToken($web)->postJson('/api/v1/devices/claim-code')->assertStatus(422);
+    }
 }

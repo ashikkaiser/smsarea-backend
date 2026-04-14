@@ -35,4 +35,26 @@ class UserDeviceEntitlement extends Model
     {
         return max(0, (int) $this->slots_purchased - (int) $this->slots_used);
     }
+
+    /**
+     * Status shown to clients: active rows past valid_until are treated as expired.
+     */
+    public function effectiveStatus(): string
+    {
+        if ($this->status !== 'active') {
+            return (string) $this->status;
+        }
+
+        $until = $this->valid_until;
+        if ($until !== null && $until->isPast()) {
+            return 'expired';
+        }
+
+        return 'active';
+    }
+
+    public function isUsable(): bool
+    {
+        return $this->effectiveStatus() === 'active';
+    }
 }

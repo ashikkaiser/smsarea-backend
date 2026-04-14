@@ -305,7 +305,7 @@ class DeviceService
             ->where('user_id', $owner->id)
             ->where('status', 'active')
             ->first();
-        if (! $entitlement) {
+        if (! $entitlement || ! $entitlement->isUsable()) {
             throw new RuntimeException('No active device-slot entitlement found for this user.');
         }
 

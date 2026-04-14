@@ -18,6 +18,19 @@ class UserDeviceController extends Controller
     {
         $user = request()->user();
 
+        $entitlement = UserDeviceEntitlement::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $entitlement || ! $entitlement->isUsable() || $entitlement->availableSlots() <= 0) {
+            $message = ! $entitlement || ! $entitlement->isUsable()
+                ? 'Your device slot access is not active. Buy or renew slots, or wait until your entitlement is valid again.'
+                : 'You need at least one available device slot before generating a pairing code. Buy slots or remove a claimed device first.';
+
+            return $this->failure($message, 422);
+        }
+
         ApiToken::query()
             ->where('type', DeviceService::API_TOKEN_TYPE_USER_DEVICE_CLAIM)
             ->where('created_by', $user->id)
@@ -91,8 +104,8 @@ class UserDeviceController extends Controller
             'entitlement' => $entitlement ? [
                 'slots_purchased' => (int) $entitlement->slots_purchased,
                 'slots_used' => (int) $entitlement->slots_used,
-                'slots_available' => $entitlement->availableSlots(),
-                'status' => $entitlement->status,
+                'slots_available' => $entitlement->isUsable() ? $entitlement->availableSlots() : 0,
+                'status' => $entitlement->effectiveStatus(),
                 'valid_until' => $entitlement->valid_until,
             ] : null,
             'devices' => $devices,

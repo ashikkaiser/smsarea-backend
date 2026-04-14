@@ -40,4 +40,24 @@ class UserDeviceDashboardTest extends TestCase
         $response->assertJsonPath('data.devices.0.id', $device->id);
         $response->assertJsonPath('data.devices.0.device_uid', 'test-device-uid-1');
     }
+
+    public function test_dashboard_marks_entitlement_expired_after_valid_until(): void
+    {
+        $user = User::factory()->create(['role' => 'user', 'status' => 'active', 'can_device' => true]);
+        $token = $user->createToken('t', ['user'])->plainTextToken;
+
+        UserDeviceEntitlement::query()->create([
+            'user_id' => $user->id,
+            'slots_purchased' => 2,
+            'slots_used' => 0,
+            'status' => 'active',
+            'valid_until' => now()->subHour(),
+        ]);
+
+        $response = $this->withToken($token)->getJson('/api/v1/devices/my');
+
+        $response->assertOk();
+        $response->assertJsonPath('data.entitlement.status', 'expired');
+        $response->assertJsonPath('data.entitlement.slots_available', 0);
+    }
 }
