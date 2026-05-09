@@ -8,6 +8,8 @@ use App\Models\EsimCarrierPlan;
 use App\Models\EsimInventory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use Throwable;
 
 class EsimInventoryController extends Controller
 {
@@ -75,24 +77,39 @@ class EsimInventoryController extends Controller
     public function import(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'csv' => ['required', 'file', 'mimes:csv,txt'],
+            'csv' => ['required', 'file', 'max:20480', 'mimes:csv,txt,xlsx,xls'],
             'default_carrier_slug' => ['nullable', 'string', 'max:32', 'regex:/^[a-z0-9_]+$/'],
         ]);
 
         $defaultSlug = strtolower(trim((string) ($data['default_carrier_slug'] ?? '')));
 
-        $file = $data['csv'];
-        $handle = fopen($file->getRealPath(), 'rb');
-        if (! $handle) {
-            return $this->failure('Unable to open CSV file.', 422);
+        $upload = $data['csv'];
+        $path = $upload->getRealPath();
+        if ($path === false) {
+            return $this->failure('Unable to read upload.', 422);
+        }
+
+        $ext = strtolower((string) $upload->getClientOriginalExtension());
+
+        try {
+            $rowIterator = match ($ext) {
+                'csv', 'txt' => self::iterateCsvRows($path),
+                'xlsx', 'xls' => self::iterateSpreadsheetRows($path),
+                default => null,
+            };
+        } catch (Throwable $e) {
+            return $this->failure('Could not read spreadsheet: '.$e->getMessage(), 422);
+        }
+
+        if ($rowIterator === null) {
+            return $this->failure('Unsupported file type. Use CSV or Excel (.xlsx / .xls).', 422);
         }
 
         $header = null;
         $imported = 0;
         $errors = [];
-        $line = 0;
-        while (($row = fgetcsv($handle)) !== false) {
-            $line++;
+
+        foreach ($rowIterator as $line => $row) {
             if ($line === 1) {
                 $header = array_map(static fn ($v) => self::normalizeImportHeaderCell((string) $v), $row);
 
@@ -103,7 +120,14 @@ class EsimInventoryController extends Controller
             }
             $assoc = [];
             foreach ($header as $idx => $key) {
-                $assoc[$key] = $row[$idx] ?? null;
+                $cell = $row[$idx] ?? null;
+                if ($cell === null) {
+                    $assoc[$key] = null;
+                } elseif (is_scalar($cell)) {
+                    $assoc[$key] = trim((string) $cell);
+                } else {
+                    $assoc[$key] = '';
+                }
             }
 
             try {
@@ -137,16 +161,67 @@ class EsimInventoryController extends Controller
                     ]
                 );
                 $imported++;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $errors[] = ['line' => $line, 'error' => $e->getMessage()];
             }
         }
-        fclose($handle);
 
         return $this->success([
             'imported' => $imported,
             'errors' => $errors,
-        ], 'eSIM CSV import finished.');
+        ], 'eSIM import finished.');
+    }
+
+    /**
+     * @return \Generator<int, array<int, string>>
+     */
+    private static function iterateCsvRows(string $path): \Generator
+    {
+        $handle = fopen($path, 'rb');
+        if (! $handle) {
+            throw new \RuntimeException('Unable to open file.');
+        }
+        try {
+            $line = 0;
+            while (($row = fgetcsv($handle)) !== false) {
+                $line++;
+                /** @var array<int, string> $normalized */
+                $normalized = array_map(static fn ($v) => (string) $v, $row);
+                yield $line => $normalized;
+            }
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
+     * First worksheet only; row 1 = headers (same as CSV).
+     *
+     * @return \Generator<int, array<int, string>>
+     */
+    private static function iterateSpreadsheetRows(string $path): \Generator
+    {
+        $spreadsheet = IOFactory::load($path);
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        foreach ($rows as $idx => $row) {
+            $line = $idx + 1;
+            if (! is_array($row)) {
+                yield $line => [];
+
+                continue;
+            }
+            $normalized = [];
+            foreach ($row as $cell) {
+                if ($cell === null) {
+                    $normalized[] = '';
+                } elseif (is_scalar($cell)) {
+                    $normalized[] = trim((string) $cell);
+                } else {
+                    $normalized[] = '';
+                }
+            }
+            yield $line => $normalized;
+        }
     }
 
     /**
