@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Admin\BillingSettingsController;
 use App\Http\Controllers\Api\V1\Admin\CampaignBuilderLimitController;
 use App\Http\Controllers\Api\V1\Admin\DebugController;
 use App\Http\Controllers\Api\V1\Admin\DeviceManagementController;
+use App\Http\Controllers\Api\V1\Admin\EsimCarrierPlanController;
 use App\Http\Controllers\Api\V1\Admin\EsimInventoryController;
 use App\Http\Controllers\Api\V1\Admin\OrderProvisionController;
 use App\Http\Controllers\Api\V1\Admin\PhoneNumberAssignmentController;
@@ -15,11 +16,11 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CampaignController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\EsimController;
-use App\Http\Controllers\Api\V1\UserDeviceController;
 use App\Http\Controllers\Api\V1\NowPaymentsWebhookController;
 use App\Http\Controllers\Api\V1\NumberPurchaseController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PhoneNumberMarketplaceController;
+use App\Http\Controllers\Api\V1\UserDeviceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -59,6 +60,8 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/campaign-builder-limits', [CampaignBuilderLimitController::class, 'update']);
             Route::get('/billing/settings', [BillingSettingsController::class, 'show']);
             Route::put('/billing/settings', [BillingSettingsController::class, 'update']);
+            Route::get('/billing/esim-carrier-plans', [EsimCarrierPlanController::class, 'index']);
+            Route::put('/billing/esim-carrier-plans', [EsimCarrierPlanController::class, 'sync']);
             Route::get('/users/{user}/phone-pricing', [BillingSettingsController::class, 'showUserPrice']);
             Route::put('/users/{user}/phone-pricing', [BillingSettingsController::class, 'updateUserPrice']);
             Route::get('/debug/messages/by-device-message-id/{deviceMessageId}', [DebugController::class, 'messageByDeviceMessageId'])

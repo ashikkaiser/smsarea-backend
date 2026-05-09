@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\BillingSetting;
+use App\Models\EsimCarrierPlan;
 use App\Models\EsimInventory;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -74,7 +75,9 @@ class UniversalOrderFlowTest extends TestCase
 
         $user = User::factory()->create(['role' => 'user', 'status' => 'active']);
         $token = $user->createToken('m', ['user'])->plainTextToken;
+        $plan = EsimCarrierPlan::query()->firstOrFail();
         $esim = EsimInventory::query()->create([
+            'esim_carrier_plan_id' => $plan->id,
             'iccid' => '8901000000000000001',
             'phone_number' => '+12025550199',
             'zip_code' => '10001',
@@ -109,7 +112,9 @@ class UniversalOrderFlowTest extends TestCase
             'currency' => 'USD',
             'status' => Order::STATUS_FULFILLED,
         ]);
+        $plan = EsimCarrierPlan::query()->firstOrFail();
         $esim = EsimInventory::query()->create([
+            'esim_carrier_plan_id' => $plan->id,
             'iccid' => '8901000000000000002',
             'phone_number' => '+12025550222',
             'status' => 'sold',
@@ -150,7 +155,9 @@ class UniversalOrderFlowTest extends TestCase
             'currency' => 'USD',
             'status' => Order::STATUS_PAID,
         ]);
+        $plan = EsimCarrierPlan::query()->firstOrFail();
         $esim = EsimInventory::query()->create([
+            'esim_carrier_plan_id' => $plan->id,
             'iccid' => '8901000000000000003',
             'phone_number' => '+12025550333',
             'status' => 'available',

@@ -283,14 +283,14 @@ class UniversalOrderService
             if (! $allowTakenEsim) {
                 $esimQuery->where('status', EsimInventory::STATUS_AVAILABLE);
             }
-            $esim = $esimQuery->first();
+            $esim = $esimQuery->with('carrierPlan')->first();
             if (! $esim) {
                 throw new RuntimeException('The selected eSIM is not available.');
             }
             if (! $allowTakenEsim && $esim->status !== EsimInventory::STATUS_AVAILABLE) {
                 throw new RuntimeException('The selected eSIM is not available.');
             }
-            $esimQuote = $this->pricing->esimPricingForUser($user, $durationDays);
+            $esimQuote = $this->pricing->esimQuoteForUserAndInventory($user, $esim);
             $unitAmountMinor = (int) $esimQuote['amount_minor'];
             $currency = strtoupper((string) $esimQuote['currency']);
             $durationDays = (int) $esimQuote['duration_days'];
@@ -299,6 +299,9 @@ class UniversalOrderService
                 'zip_code' => $esim->zip_code,
                 'area_code' => $esim->area_code,
                 'masked_phone_number' => $esim->maskedPhoneNumber(),
+                'carrier_plan_id' => $esimQuote['carrier_plan_id'],
+                'carrier_slug' => $esimQuote['carrier_slug'],
+                'carrier_name' => $esimQuote['carrier_name'],
             ];
         } else {
             throw new RuntimeException('Unsupported product type.');

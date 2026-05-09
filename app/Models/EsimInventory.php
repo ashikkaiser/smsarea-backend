@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class EsimInventory extends Model
@@ -14,6 +15,7 @@ class EsimInventory extends Model
     public const STATUS_SOLD = 'sold';
 
     protected $fillable = [
+        'esim_carrier_plan_id',
         'iccid',
         'phone_number',
         'qr_code',
@@ -29,6 +31,11 @@ class EsimInventory extends Model
         return [
             'meta' => 'array',
         ];
+    }
+
+    public function carrierPlan(): BelongsTo
+    {
+        return $this->belongsTo(EsimCarrierPlan::class, 'esim_carrier_plan_id');
     }
 
     public function userEsim(): HasOne

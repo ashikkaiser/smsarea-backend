@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Api\V1\Concerns\ApiResponse;
 use App\Http\Controllers\Controller;
+use App\Models\EsimCarrierPlan;
 use App\Models\EsimInventory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,7 @@ class EsimInventoryController extends Controller
 
     public function index(): JsonResponse
     {
-        $rows = EsimInventory::query()->latest('id')->paginate(50);
+        $rows = EsimInventory::query()->with('carrierPlan')->latest('id')->paginate(50);
 
         return $this->success($rows, 'eSIM inventory fetched.');
     }
@@ -22,6 +23,7 @@ class EsimInventoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
+            'esim_carrier_plan_id' => ['required', 'integer', 'exists:esim_carrier_plans,id'],
             'iccid' => ['required', 'string', 'max:64'],
             'phone_number' => ['required', 'string', 'max:32'],
             'qr_code' => ['nullable', 'string'],
@@ -31,7 +33,14 @@ class EsimInventoryController extends Controller
             'status' => ['nullable', 'string', 'in:available,reserved,sold'],
         ]);
 
+        $plan = EsimCarrierPlan::query()->findOrFail((int) $data['esim_carrier_plan_id']);
+        if (! $plan->is_active) {
+            return $this->failure('Selected carrier plan is not active.', 422);
+        }
+
         $row = EsimInventory::query()->create($data);
+
+        $row->load('carrierPlan');
 
         return $this->success($row, 'eSIM created.', 201);
     }
@@ -39,6 +48,7 @@ class EsimInventoryController extends Controller
     public function update(Request $request, EsimInventory $esim): JsonResponse
     {
         $data = $request->validate([
+            'esim_carrier_plan_id' => ['sometimes', 'integer', 'exists:esim_carrier_plans,id'],
             'phone_number' => ['sometimes', 'string', 'max:32'],
             'qr_code' => ['sometimes', 'nullable', 'string'],
             'manual_code' => ['sometimes', 'nullable', 'string', 'max:128'],
@@ -47,9 +57,16 @@ class EsimInventoryController extends Controller
             'status' => ['sometimes', 'string', 'in:available,reserved,sold'],
         ]);
 
+        if (isset($data['esim_carrier_plan_id'])) {
+            $plan = EsimCarrierPlan::query()->findOrFail((int) $data['esim_carrier_plan_id']);
+            if (! $plan->is_active) {
+                return $this->failure('Selected carrier plan is not active.', 422);
+            }
+        }
+
         $esim->update($data);
 
-        return $this->success($esim->fresh(), 'eSIM updated.');
+        return $this->success($esim->fresh('carrierPlan'), 'eSIM updated.');
     }
 
     public function import(Request $request): JsonResponse
@@ -72,6 +89,7 @@ class EsimInventoryController extends Controller
             $line++;
             if ($line === 1) {
                 $header = array_map(static fn ($v) => strtolower(trim((string) $v)), $row);
+
                 continue;
             }
             if (! is_array($header)) {
@@ -83,9 +101,19 @@ class EsimInventoryController extends Controller
             }
 
             try {
+                $slug = isset($assoc['carrier_slug']) ? strtolower(trim((string) $assoc['carrier_slug'])) : '';
+                if ($slug === '') {
+                    throw new \InvalidArgumentException('carrier_slug is required (e.g. tmobile, att, verizon).');
+                }
+                $plan = EsimCarrierPlan::query()->where('slug', $slug)->first();
+                if (! $plan) {
+                    throw new \InvalidArgumentException('Unknown carrier_slug: '.$slug);
+                }
+
                 EsimInventory::query()->updateOrCreate(
                     ['iccid' => (string) ($assoc['iccid'] ?? '')],
                     [
+                        'esim_carrier_plan_id' => $plan->id,
                         'phone_number' => (string) ($assoc['phone_number'] ?? ''),
                         'qr_code' => $assoc['qr_code'] ?? null,
                         'manual_code' => $assoc['manual_code'] ?? null,

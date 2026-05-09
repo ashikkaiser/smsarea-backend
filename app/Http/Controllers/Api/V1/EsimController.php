@@ -6,11 +6,16 @@ use App\Http\Controllers\Api\V1\Concerns\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\EsimInventory;
 use App\Models\UserEsim;
+use App\Services\BillingPricingService;
 use Illuminate\Http\JsonResponse;
 
 class EsimController extends Controller
 {
     use ApiResponse;
+
+    public function __construct(
+        private readonly BillingPricingService $pricing,
+    ) {}
 
     public function catalog(): JsonResponse
     {
@@ -21,6 +26,7 @@ class EsimController extends Controller
 
         $query = EsimInventory::query()
             ->where('status', EsimInventory::STATUS_AVAILABLE)
+            ->with('carrierPlan')
             ->latest('id');
 
         if (! empty($validated['zip_code'])) {
@@ -30,14 +36,33 @@ class EsimController extends Controller
             $query->where('area_code', $validated['area_code']);
         }
 
-        $rows = $query->limit(200)->get()->map(function (EsimInventory $row): array {
-            return [
+        $user = request()->user();
+        $rows = $query->limit(200)->get()->map(function (EsimInventory $row) use ($user): array {
+            $base = [
                 'id' => $row->id,
                 'masked_phone_number' => $row->maskedPhoneNumber(),
                 'zip_code' => $row->zip_code,
                 'area_code' => $row->area_code,
                 'status' => $row->status,
             ];
+            try {
+                $q = $this->pricing->esimQuoteForUserAndInventory($user, $row);
+                $base['carrier'] = [
+                    'id' => $q['carrier_plan_id'],
+                    'slug' => $q['carrier_slug'],
+                    'name' => $q['carrier_name'],
+                ];
+                $base['pricing'] = [
+                    'amount_minor' => $q['amount_minor'],
+                    'currency' => $q['currency'],
+                    'duration_days' => $q['duration_days'],
+                ];
+            } catch (\Throwable) {
+                $base['carrier'] = null;
+                $base['pricing'] = null;
+            }
+
+            return $base;
         });
 
         return $this->success($rows, 'eSIM catalog fetched.');

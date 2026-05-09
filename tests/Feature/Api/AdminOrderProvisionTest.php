@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\BillingSetting;
+use App\Models\EsimCarrierPlan;
 use App\Models\EsimInventory;
 use App\Models\User;
 use App\Models\UserDeviceEntitlement;
@@ -94,7 +95,10 @@ class AdminOrderProvisionTest extends TestCase
         $adminToken = $admin->createToken('admin')->plainTextToken;
 
         BillingSetting::current()->update(['esim_price_minor' => 3500]);
+        $plan = EsimCarrierPlan::query()->firstOrFail();
+        $plan->update(['price_minor' => 3500]);
         $esim = EsimInventory::query()->create([
+            'esim_carrier_plan_id' => $plan->id,
             'iccid' => '8901000000000000009',
             'phone_number' => '+12025550999',
             'status' => 'available',

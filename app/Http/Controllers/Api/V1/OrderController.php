@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Api\V1\Concerns\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Orders\StoreOrderRequest;
+use App\Models\BillingSetting;
+use App\Models\EsimCarrierPlan;
 use App\Models\EsimInventory;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -37,22 +39,43 @@ class OrderController extends Controller
         );
         $esims = EsimInventory::query()
             ->where('status', EsimInventory::STATUS_AVAILABLE)
+            ->with('carrierPlan')
             ->limit(200)
             ->get()
-            ->map(static fn (EsimInventory $e): array => [
-                'id' => $e->id,
-                'masked_phone_number' => $e->maskedPhoneNumber(),
-                'zip_code' => $e->zip_code,
-                'area_code' => $e->area_code,
-                'status' => $e->status,
-            ]);
+            ->map(function (EsimInventory $e) use ($user): array {
+                $row = [
+                    'id' => $e->id,
+                    'masked_phone_number' => $e->maskedPhoneNumber(),
+                    'zip_code' => $e->zip_code,
+                    'area_code' => $e->area_code,
+                    'status' => $e->status,
+                ];
+                try {
+                    $q = $this->pricing->esimQuoteForUserAndInventory($user, $e);
+                    $row['carrier'] = [
+                        'id' => $q['carrier_plan_id'],
+                        'slug' => $q['carrier_slug'],
+                        'name' => $q['carrier_name'],
+                    ];
+                    $row['pricing'] = [
+                        'amount_minor' => $q['amount_minor'],
+                        'currency' => $q['currency'],
+                        'duration_days' => $q['duration_days'],
+                    ];
+                } catch (\Throwable) {
+                    $row['carrier'] = null;
+                    $row['pricing'] = null;
+                }
+
+                return $row;
+            });
 
         $data = [
             'number_products' => $numbers,
             'esim_products' => $esims,
             'pricing' => [
                 'number' => $this->pricing->quoteForUser($user),
-                'esim' => $this->pricing->esimPricingForUser($user),
+                'esim_carriers' => $this->pricing->esimCarrierPlansPricingForUser($user),
             ],
         ];
 
@@ -69,6 +92,8 @@ class OrderController extends Controller
         $validated = request()->validate([
             'product_type' => ['required', 'string', 'in:number,device_slot,esim'],
             'duration_days' => ['sometimes', 'integer', 'min:1', 'max:3650'],
+            'esim_inventory_id' => ['sometimes', 'integer', 'exists:esim_inventories,id'],
+            'esim_carrier_plan_id' => ['sometimes', 'integer', 'exists:esim_carrier_plans,id'],
         ]);
         $durationDays = isset($validated['duration_days']) ? (int) $validated['duration_days'] : null;
 
@@ -90,9 +115,34 @@ class OrderController extends Controller
             );
         }
 
+        $user = request()->user();
+        if (! empty($validated['esim_inventory_id'])) {
+            $esim = EsimInventory::query()->with('carrierPlan')->findOrFail((int) $validated['esim_inventory_id']);
+
+            return $this->success(
+                $this->pricing->esimQuoteForUserAndInventory($user, $esim),
+                'Pricing preview.',
+            );
+        }
+
+        if (! empty($validated['esim_carrier_plan_id'])) {
+            $plan = EsimCarrierPlan::query()->where('is_active', true)->findOrFail((int) $validated['esim_carrier_plan_id']);
+            $settings = BillingSetting::current();
+            $dur = $plan->duration_days ?? $durationDays ?? (int) $settings->default_duration_days;
+
+            return $this->success([
+                'amount_minor' => $this->pricing->esimPriceMinorForUserAndPlan($user, $plan),
+                'currency' => strtoupper((string) $settings->currency),
+                'duration_days' => max(1, (int) $dur),
+                'carrier_plan_id' => (int) $plan->id,
+                'carrier_slug' => (string) $plan->slug,
+                'carrier_name' => (string) $plan->name,
+            ], 'Pricing preview.');
+        }
+
         return $this->success(
-            $this->pricing->esimPricingForUser(request()->user(), $durationDays),
-            'Pricing preview.',
+            ['carriers' => $this->pricing->esimCarrierPlansPricingForUser($user)],
+            'eSIM pricing is per carrier. Pass esim_inventory_id or esim_carrier_plan_id for a line item quote, or use carriers list.',
         );
     }
 
